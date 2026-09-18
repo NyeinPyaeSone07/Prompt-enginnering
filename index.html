@@ -42,7 +42,7 @@
               Sales Summary & Forecasting Dashboard
             </h1>
             <span id="badgeMilestone" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
-              Milestone M3
+              Milestone M4
             </span>
           </div>
           <p id="appSubtitle" class="text-sm text-slate-500 mt-1">
@@ -295,20 +295,61 @@
         </div>
       </section>
 
-      <!-- Visualization Grid Shell (Reserved for M4) -->
-      <section id="chartsSectionShell" class="grid grid-cols-1 lg:grid-cols-3 gap-6 opacity-75">
-        <div class="lg:col-span-2 bg-white rounded-xl border border-dashed border-slate-300 p-5">
-          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Daily Sales Trend (M4 Shell)</div>
-          <div class="h-64 flex items-center justify-center text-slate-400 text-xs bg-slate-50 rounded-lg">
-            <canvas id="dailyTrendChart" class="hidden"></canvas>
-            <span>Chart.js Line Canvas (Reserved for M4)</span>
+      <!-- Visualization Grid (Milestone M4 Active) -->
+      <section id="chartsSection" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Chart 1: Sales vs Target Trajectory Line Chart -->
+        <div class="bg-white rounded-xl border border-slate-200 p-6 shadow-xs flex flex-col justify-between">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+            <div>
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Trajectory Analysis</span>
+              <h3 class="text-base font-bold text-slate-900 mt-0.5">Sales vs. Target Trajectory</h3>
+            </div>
+            <div class="flex items-center gap-3 text-xs">
+              <span class="inline-flex items-center gap-1.5 text-slate-700 font-medium">
+                <span class="w-2.5 h-2.5 rounded-full bg-blue-600"></span> Actual
+              </span>
+              <span class="inline-flex items-center gap-1.5 text-slate-500 font-medium">
+                <span class="w-3 h-0.5 bg-slate-400"></span> Target
+              </span>
+              <span class="inline-flex items-center gap-1.5 text-indigo-600 font-medium">
+                <span class="w-3 h-0.5 border-t-2 border-dashed border-indigo-500"></span> Projected
+              </span>
+            </div>
+          </div>
+          <div class="relative h-72 w-full">
+            <canvas id="trajectoryChart"></canvas>
+          </div>
+          <div class="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500 flex items-center justify-between">
+            <span id="chart1PaceLegend">Actual pace vs linear target progression</span>
+            <span class="font-medium text-slate-700" id="chart1ElapsedNote">Elapsed: 10 of 24 days</span>
           </div>
         </div>
-        <div class="bg-white rounded-xl border border-dashed border-slate-300 p-5">
-          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Sales by Salesperson (M4 Shell)</div>
-          <div class="h-64 flex items-center justify-center text-slate-400 text-xs bg-slate-50 rounded-lg">
-            <canvas id="salespersonChart" class="hidden"></canvas>
-            <span>Chart.js Bar Canvas (Reserved for M4)</span>
+
+        <!-- Chart 2: Forecast Range Area Chart (Low, Base, High Band) -->
+        <div class="bg-white rounded-xl border border-slate-200 p-6 shadow-xs flex flex-col justify-between">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+            <div>
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Scenario Projections</span>
+              <h3 class="text-base font-bold text-slate-900 mt-0.5">Forecast Range Band (±10%)</h3>
+            </div>
+            <div class="flex items-center gap-3 text-xs">
+              <span class="inline-flex items-center gap-1.5 text-emerald-600 font-medium">
+                <span class="w-3 h-0.5 border-t-2 border-dashed border-emerald-500"></span> High (+10%)
+              </span>
+              <span class="inline-flex items-center gap-1.5 text-blue-600 font-medium">
+                <span class="w-2.5 h-2.5 rounded-full bg-blue-600"></span> Base
+              </span>
+              <span class="inline-flex items-center gap-1.5 text-amber-600 font-medium">
+                <span class="w-3 h-0.5 border-t-2 border-dashed border-amber-500"></span> Low (-10%)
+              </span>
+            </div>
+          </div>
+          <div class="relative h-72 w-full">
+            <canvas id="forecastRangeChart"></canvas>
+          </div>
+          <div class="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500 flex items-center justify-between">
+            <span>Confidence cone projecting month-end variance</span>
+            <span class="font-medium text-slate-700" id="chart2BandNote">Band: ±10%</span>
           </div>
         </div>
       </section>
@@ -833,6 +874,382 @@
         return prefix + absVal;
       }
 
+      /* ==========================================================================
+         MILESTONE M4: CHART.JS VISUALIZATION ENGINE
+         ========================================================================== */
+
+      /**
+       * References to active Chart.js instances for clean destruction and re-creation.
+       */
+      let trajectoryChartInstance = null;
+      let forecastRangeChartInstance = null;
+
+      /**
+       * Parse DD/MM/YYYY into timestamp for accurate chronological sorting.
+       *
+       * @param {string} dStr - Date string in DD/MM/YYYY
+       * @returns {number} Timestamp in milliseconds
+       */
+      function parseDateToTs(dStr) {
+        if (!dStr) return 0;
+        const parts = String(dStr).split('/');
+        if (parts.length === 3) {
+          const d = parseInt(parts[0], 10);
+          const m = parseInt(parts[1], 10) - 1;
+          const y = parseInt(parts[2], 10);
+          return new Date(y, m, d).getTime();
+        }
+        return 0;
+      }
+
+      /**
+       * Aggregate actual daily sales by date and calculate cumulative totals.
+       *
+       * @param {Array<Object>} invoices - Normalized clean invoices
+       * @returns {Array<{ date: string, dailyTotal: number, cumulativeTotal: number }>}
+       */
+      function aggregateDailySales(invoices) {
+        if (!Array.isArray(invoices) || invoices.length === 0) return [];
+
+        // 1. Group invoices by date
+        const dailyMap = new Map();
+        for (const inv of invoices) {
+          const d = inv.date || 'Unknown';
+          const prev = dailyMap.get(d) || 0;
+          dailyMap.set(d, prev + (inv.grandTotal || 0));
+        }
+
+        // 2. Sort dates chronologically
+        const sortedDates = Array.from(dailyMap.keys()).sort((a, b) => parseDateToTs(a) - parseDateToTs(b));
+
+        // 3. Compute cumulative series
+        let runningTotal = 0;
+        return sortedDates.map(date => {
+          const dailyTotal = Math.round((dailyMap.get(date) || 0) * 100) / 100;
+          runningTotal = Math.round((runningTotal + dailyTotal) * 100) / 100;
+          return {
+            date,
+            dailyTotal,
+            cumulativeTotal: runningTotal
+          };
+        });
+      }
+
+      /**
+       * Render Chart 1: Sales vs Target Trajectory Chart.
+       * Compares actual cumulative daily sales against target pace and projected run rate.
+       *
+       * @param {number} salesToDate - Cumulative sales MTD
+       * @param {number} elapsedDays - Number of working days elapsed
+       * @param {number} totalDays - Scheduled total working days
+       * @param {number} monthlyTarget - Monthly sales target in THB
+       * @param {number} runRate - Projected run-rate at month-end
+       * @param {Array<Object>} dailyAggregates - Aggregated chronological daily sales
+       */
+      function renderTrajectoryChart(salesToDate, elapsedDays, totalDays, monthlyTarget, runRate, dailyAggregates) {
+        const canvas = document.getElementById('trajectoryChart');
+        if (!canvas) return;
+
+        // Clean destruction of previous instance to prevent overlapping canvas / memory leaks
+        if (trajectoryChartInstance) {
+          trajectoryChartInstance.destroy();
+          trajectoryChartInstance = null;
+        }
+
+        // Build labels for Day 1 through Day totalDays
+        const labels = [];
+        for (let i = 1; i <= totalDays; i++) {
+          labels.push(`Day ${i}`);
+        }
+
+        // 1. Actual Cumulative Sales data series
+        const actualData = [];
+        const nDaysActual = dailyAggregates.length;
+        for (let i = 1; i <= totalDays; i++) {
+          if (i <= elapsedDays) {
+            if (i <= nDaysActual) {
+              actualData.push(dailyAggregates[i - 1].cumulativeTotal);
+            } else if (nDaysActual > 0) {
+              actualData.push(dailyAggregates[nDaysActual - 1].cumulativeTotal);
+            } else {
+              actualData.push(Math.round(((salesToDate / elapsedDays) * i) * 100) / 100);
+            }
+          } else {
+            actualData.push(null);
+          }
+        }
+
+        // 2. Linear Target Pace series (from Day 1 to Day totalDays reaching monthlyTarget)
+        const targetPaceData = [];
+        for (let i = 1; i <= totalDays; i++) {
+          const paceVal = totalDays > 0 ? (monthlyTarget / totalDays) * i : 0;
+          targetPaceData.push(Math.round(paceVal * 100) / 100);
+        }
+
+        // 3. Projected Run Rate Trajectory series (from elapsedDays to totalDays reaching runRate)
+        const projectedData = [];
+        for (let i = 1; i <= totalDays; i++) {
+          if (i < elapsedDays) {
+            projectedData.push(null);
+          } else if (i === elapsedDays) {
+            projectedData.push(salesToDate);
+          } else {
+            const frac = totalDays > elapsedDays ? (i - elapsedDays) / (totalDays - elapsedDays) : 1;
+            const projVal = salesToDate + (runRate - salesToDate) * frac;
+            projectedData.push(Math.round(projVal * 100) / 100);
+          }
+        }
+
+        const ctx = canvas.getContext('2d');
+        trajectoryChartInstance = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [
+              {
+                label: 'Actual Cumulative Sales',
+                data: actualData,
+                borderColor: '#2563eb', // Blue-600
+                backgroundColor: 'rgba(37, 99, 235, 0.08)',
+                borderWidth: 2.5,
+                pointBackgroundColor: '#2563eb',
+                pointRadius: 3,
+                pointHoverRadius: 5,
+                tension: 0.1,
+                spanGaps: false
+              },
+              {
+                label: 'Linear Target Pace',
+                data: targetPaceData,
+                borderColor: '#94a3b8', // Slate-400
+                borderWidth: 2,
+                borderDash: [5, 5],
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                tension: 0,
+                fill: false
+              },
+              {
+                label: 'Projected Run Rate',
+                data: projectedData,
+                borderColor: '#6366f1', // Indigo-500
+                backgroundColor: 'rgba(99, 102, 241, 0.05)',
+                borderWidth: 2,
+                borderDash: [4, 4],
+                pointBackgroundColor: '#6366f1',
+                pointRadius: 2,
+                pointHoverRadius: 5,
+                tension: 0,
+                spanGaps: false
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+              mode: 'index',
+              intersect: false
+            },
+            plugins: {
+              legend: {
+                display: false
+              },
+              tooltip: {
+                backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                titleFont: { family: 'Plus Jakarta Sans, sans-serif', size: 12 },
+                bodyFont: { family: 'Plus Jakarta Sans, sans-serif', size: 12 },
+                padding: 10,
+                cornerRadius: 8,
+                callbacks: {
+                  label: function(context) {
+                    if (context.parsed.y === null || isNaN(context.parsed.y)) return '';
+                    return ` ${context.dataset.label}: ฿ ${context.parsed.y.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                grid: { display: false },
+                ticks: {
+                  font: { family: 'Plus Jakarta Sans, sans-serif', size: 11 },
+                  color: '#64748b',
+                  maxTicksLimit: 12
+                }
+              },
+              y: {
+                grid: { color: '#f1f5f9' },
+                ticks: {
+                  font: { family: 'Plus Jakarta Sans, sans-serif', size: 11 },
+                  color: '#64748b',
+                  callback: function(value) {
+                    return '฿ ' + (value >= 1000 ? (value / 1000).toLocaleString('en-US') + 'k' : value);
+                  }
+                }
+              }
+            }
+          }
+        });
+
+        // Update footnote
+        const chart1ElapsedNote = document.getElementById('chart1ElapsedNote');
+        if (chart1ElapsedNote) {
+          chart1ElapsedNote.textContent = `Elapsed: ${elapsedDays} of ${totalDays} days`;
+        }
+      }
+
+      /**
+       * Render Chart 2: Forecast Range Area Chart.
+       * Visual band showing Low, Base, and High scenario projections with shaded confidence area.
+       *
+       * @param {number} salesToDate - Cumulative sales MTD
+       * @param {number} elapsedDays - Number of working days elapsed
+       * @param {number} totalDays - Scheduled total working days
+       * @param {{ low: number, base: number, high: number }} forecastRange - Bounded forecast scenarios
+       * @param {Array<Object>} dailyAggregates - Aggregated chronological daily sales
+       */
+      function renderForecastRangeChart(salesToDate, elapsedDays, totalDays, forecastRange, dailyAggregates) {
+        const canvas = document.getElementById('forecastRangeChart');
+        if (!canvas) return;
+
+        // Clean destruction of previous instance to prevent overlapping canvas / memory leaks
+        if (forecastRangeChartInstance) {
+          forecastRangeChartInstance.destroy();
+          forecastRangeChartInstance = null;
+        }
+
+        // Build labels for Day 1 through Day totalDays
+        const labels = [];
+        for (let i = 1; i <= totalDays; i++) {
+          labels.push(`Day ${i}`);
+        }
+
+        const highData = [];
+        const baseData = [];
+        const lowData = [];
+
+        const nDaysActual = dailyAggregates.length;
+
+        for (let i = 1; i <= totalDays; i++) {
+          if (i <= elapsedDays) {
+            let actualVal;
+            if (i <= nDaysActual) {
+              actualVal = dailyAggregates[i - 1].cumulativeTotal;
+            } else if (nDaysActual > 0) {
+              actualVal = dailyAggregates[nDaysActual - 1].cumulativeTotal;
+            } else {
+              actualVal = Math.round(((salesToDate / elapsedDays) * i) * 100) / 100;
+            }
+            highData.push(actualVal);
+            baseData.push(actualVal);
+            lowData.push(actualVal);
+          } else {
+            const frac = totalDays > elapsedDays ? (i - elapsedDays) / (totalDays - elapsedDays) : 1;
+            const hVal = salesToDate + (forecastRange.high - salesToDate) * frac;
+            const bVal = salesToDate + (forecastRange.base - salesToDate) * frac;
+            const lVal = salesToDate + (forecastRange.low - salesToDate) * frac;
+
+            highData.push(Math.round(hVal * 100) / 100);
+            baseData.push(Math.round(bVal * 100) / 100);
+            lowData.push(Math.round(lVal * 100) / 100);
+          }
+        }
+
+        const ctx = canvas.getContext('2d');
+        forecastRangeChartInstance = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [
+              {
+                label: 'High Scenario (+10%)',
+                data: highData,
+                borderColor: '#10b981', // Emerald-500
+                backgroundColor: 'rgba(59, 130, 246, 0.12)',
+                borderWidth: 1.75,
+                borderDash: [3, 3],
+                pointRadius: 0,
+                fill: '+2', // Fills down to Low Scenario (dataset index 2)
+                tension: 0.1
+              },
+              {
+                label: 'Base Run Rate',
+                data: baseData,
+                borderColor: '#2563eb', // Blue-600
+                borderWidth: 2.5,
+                pointRadius: (ctx) => (ctx.dataIndex === totalDays - 1 || ctx.dataIndex === elapsedDays - 1 ? 4 : 0),
+                pointBackgroundColor: '#2563eb',
+                fill: false,
+                tension: 0.1
+              },
+              {
+                label: 'Low Scenario (-10%)',
+                data: lowData,
+                borderColor: '#f59e0b', // Amber-500
+                borderWidth: 1.75,
+                borderDash: [3, 3],
+                pointRadius: 0,
+                fill: false,
+                tension: 0.1
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+              mode: 'index',
+              intersect: false
+            },
+            plugins: {
+              legend: {
+                display: false
+              },
+              tooltip: {
+                backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                titleFont: { family: 'Plus Jakarta Sans, sans-serif', size: 12 },
+                bodyFont: { family: 'Plus Jakarta Sans, sans-serif', size: 12 },
+                padding: 10,
+                cornerRadius: 8,
+                callbacks: {
+                  label: function(context) {
+                    if (context.parsed.y === null || isNaN(context.parsed.y)) return '';
+                    return ` ${context.dataset.label}: ฿ ${context.parsed.y.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                grid: { display: false },
+                ticks: {
+                  font: { family: 'Plus Jakarta Sans, sans-serif', size: 11 },
+                  color: '#64748b',
+                  maxTicksLimit: 12
+                }
+              },
+              y: {
+                grid: { color: '#f1f5f9' },
+                ticks: {
+                  font: { family: 'Plus Jakarta Sans, sans-serif', size: 11 },
+                  color: '#64748b',
+                  callback: function(value) {
+                    return '฿ ' + (value >= 1000 ? (value / 1000).toLocaleString('en-US') + 'k' : value);
+                  }
+                }
+              }
+            }
+          }
+        });
+
+        // Update footnote
+        const chart2BandNote = document.getElementById('chart2BandNote');
+        if (chart2BandNote) {
+          chart2BandNote.textContent = `Band: ±${Math.round(DEFAULT_VARIANCE_BAND * 100)}% (Low: ฿${(forecastRange.low / 1000).toFixed(0)}k to High: ฿${(forecastRange.high / 1000).toFixed(0)}k)`;
+        }
+      }
+
       /**
        * Milestone M3: Wire pure math calculations to the DOM.
        * Updates Target Pace, Forecast Range, and Headline KPI cards in real time.
@@ -965,10 +1382,17 @@
         if (kpiPaceSub) kpiPaceSub.textContent = `Target: ${formatTHB(monthlyTarget)}`;
         if (kpiRunRateVal) kpiRunRateVal.textContent = `${formatTHB(dailyRunRate)} / day`;
         if (kpiRunRateSub) kpiRunRateSub.textContent = `Avg ${formatTHB(avgInvoiceValue)} / invoice`;
+
+        // Step 7: Render Milestone M4 Visual Charts
+        const dailyAggregates = aggregateDailySales(currentInvoices);
+        renderTrajectoryChart(roundedSalesToDate, elapsedDays, totalDays, monthlyTarget, runRate, dailyAggregates);
+        renderForecastRangeChart(roundedSalesToDate, elapsedDays, totalDays, forecastRange, dailyAggregates);
       }
 
-      // Expose updateDashboard globally
+      // Expose updateDashboard and chart instances globally
       window.updateDashboard = updateDashboard;
+      window.trajectoryChartInstance = () => trajectoryChartInstance;
+      window.forecastRangeChartInstance = () => forecastRangeChartInstance;
 
       /**
        * Parse uploaded .xlsx file client-side via SheetJS
