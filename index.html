@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sales Summary & Forecasting Dashboard</title>
+    <meta name="description" content="Self-contained sales summary and forecasting dashboard for Thai cash-sales export reports." />
+    <meta property="og:title" content="Sales Summary & Forecasting Dashboard" />
+    <meta property="og:description" content="Self-contained sales summary and forecasting dashboard for Thai cash-sales export reports." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- Google Fonts for crisp Latin & Thai typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+    <!-- Required CDNs per AGENTS.md & Milestone M1 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Plus Jakarta Sans', 'Sarabun', 'sans-serif'],
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body class="bg-slate-50 text-slate-800 font-sans min-h-screen antialiased">
+    <div id="app" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <!-- Header Section -->
+      <header id="dashboardHeader" class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-200 pb-6">
+        <div>
+          <div class="flex items-center gap-3">
+            <h1 id="appTitle" class="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
+              Sales Summary & Forecasting Dashboard
+            </h1>
+            <span id="badgeMilestone" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
+              Milestone M1
+            </span>
+          </div>
+          <p id="appSubtitle" class="text-sm text-slate-500 mt-1">
+            Cash-sales performance & run-rate forecast engine (สรุปรายงานขาย)
+          </p>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <span id="badgeDataSource" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 mr-2 animate-pulse"></span>
+            Seed Dataset Active
+          </span>
+          <button
+            id="reloadSeedBtn"
+            type="button"
+            class="text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 transition"
+            title="Reset to 30-row seed dataset"
+          >
+            Reset to Seed Data
+          </button>
+        </div>
+      </header>
+
+      <!-- Upload Zone (SheetJS File Upload) -->
+      <section id="uploadSection" class="bg-white rounded-xl border border-slate-200 p-6 shadow-xs">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+          <div>
+            <h2 id="uploadTitle" class="text-base font-semibold text-slate-900">Data Source (Excel Upload)</h2>
+            <p id="uploadDesc" class="text-xs text-slate-500">
+              Upload Thai cash-sales export file (<code class="text-slate-700 bg-slate-100 px-1 py-0.5 rounded">สรุปรายงานขาย.xlsx</code>) or use the pre-loaded seed data.
+            </p>
+          </div>
+          <div id="parseSummaryBadge" class="text-xs text-slate-500 font-medium">
+            30 seed rows parsed
+          </div>
+        </div>
+
+        <div
+          id="dropZone"
+          class="border-2 border-dashed border-slate-300 hover:border-blue-500 bg-slate-50/70 hover:bg-blue-50/40 rounded-xl p-6 text-center cursor-pointer transition flex flex-col items-center justify-center gap-2"
+        >
+          <input type="file" id="fileInput" accept=".xlsx, .xls" class="hidden" />
+          <svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+          </svg>
+          <div class="text-sm font-medium text-slate-700">
+            <span class="text-blue-600 hover:underline">Click to upload</span> or drag and drop
+          </div>
+          <p class="text-xs text-slate-400">
+            Accepts <span class="font-medium text-slate-500">.xlsx / .xls</span> exports (Columns: Date, Invoice #, Cust Code, Cust Name, Salesperson, Amount)
+          </p>
+        </div>
+
+        <div id="uploadStatus" class="mt-4 p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-600 flex items-center justify-between">
+          <span id="statusMessage">Status: Initialized with in-memory seed dataset (30 valid invoices).</span>
+          <span id="invoiceCountTag" class="font-semibold text-slate-900">30 Invoices</span>
+        </div>
+      </section>
+
+      <!-- Target Pace & Run-Rate Banner Shell (Reserved for M2 & M3) -->
+      <section id="paceBannerShell" class="bg-white rounded-xl border border-dashed border-slate-300 p-6 opacity-75">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Target Pace & Run-Rate Engine (M2 / M3 Shell)</span>
+            <h3 class="text-lg font-bold text-slate-700 mt-0.5">Monthly Pace Projection</h3>
+            <p class="text-xs text-slate-400">Pace status and forecast bands will calculate here in Milestone M2 & M3.</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="px-4 py-2 rounded-lg bg-slate-100 text-slate-500 text-xs font-semibold">
+              Status: PENDING M2
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Headline Metric KPI Cards Shell (Reserved for M3) -->
+      <section id="kpiSectionShell" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 opacity-75">
+        <div id="kpiCardSales" class="bg-white rounded-xl border border-dashed border-slate-300 p-5">
+          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Sales MTD (M3)</div>
+          <div class="text-2xl font-bold text-slate-500 mt-2">฿ --</div>
+          <div class="text-xs text-slate-400 mt-1">Sum of valid HS invoices</div>
+        </div>
+        <div id="kpiCardInvoices" class="bg-white rounded-xl border border-dashed border-slate-300 p-5">
+          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Invoices (M3)</div>
+          <div class="text-2xl font-bold text-slate-500 mt-2">--</div>
+          <div class="text-xs text-slate-400 mt-1">Parsed invoice count</div>
+        </div>
+        <div id="kpiCardCustomers" class="bg-white rounded-xl border border-dashed border-slate-300 p-5">
+          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Unique Customers (M3)</div>
+          <div class="text-2xl font-bold text-slate-500 mt-2">--</div>
+          <div class="text-xs text-slate-400 mt-1">Distinct customer accounts</div>
+        </div>
+        <div id="kpiCardAvgValue" class="bg-white rounded-xl border border-dashed border-slate-300 p-5">
+          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Avg Invoice Value (M3)</div>
+          <div class="text-2xl font-bold text-slate-500 mt-2">฿ --</div>
+          <div class="text-xs text-slate-400 mt-1">Mean value per transaction</div>
+        </div>
+      </section>
+
+      <!-- Visualization Grid Shell (Reserved for M4) -->
+      <section id="chartsSectionShell" class="grid grid-cols-1 lg:grid-cols-3 gap-6 opacity-75">
+        <div class="lg:col-span-2 bg-white rounded-xl border border-dashed border-slate-300 p-5">
+          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Daily Sales Trend (M4 Shell)</div>
+          <div class="h-64 flex items-center justify-center text-slate-400 text-xs bg-slate-50 rounded-lg">
+            <canvas id="dailyTrendChart" class="hidden"></canvas>
+            <span>Chart.js Line Canvas (Reserved for M4)</span>
+          </div>
+        </div>
+        <div class="bg-white rounded-xl border border-dashed border-slate-300 p-5">
+          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Sales by Salesperson (M4 Shell)</div>
+          <div class="h-64 flex items-center justify-center text-slate-400 text-xs bg-slate-50 rounded-lg">
+            <canvas id="salespersonChart" class="hidden"></canvas>
+            <span>Chart.js Bar Canvas (Reserved for M4)</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Invoice Table Shell (Reserved for M5) -->
+      <section id="tableSectionShell" class="bg-white rounded-xl border border-dashed border-slate-300 p-6 opacity-75">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Recent Invoices (M5 Shell)</span>
+            <h3 class="text-base font-semibold text-slate-700">10 Most Recent Invoices</h3>
+          </div>
+          <div class="text-xs text-slate-400">Table rendering reserved for Milestone M5</div>
+        </div>
+        <div class="h-24 flex items-center justify-center text-slate-400 text-xs bg-slate-50 rounded-lg border border-slate-200">
+          Data table preview and CSV export will render in Milestone M5.
+        </div>
+      </section>
+    </div>
+
+    <!-- Script Implementation: Milestone M1 Data Engine -->
+    <script>
+      /**
+       * AGENTS.md Named configuration constants
+       */
+      const INVOICE_PREFIX = 'HS';
+      const DEFAULT_VARIANCE_BAND = 0.10; // ±10% range for low/high projections
+      const DEFAULT_TOTAL_WORKING_DAYS = 24;
+
+      /**
+       * Thai structural noise keywords to strip from raw report rows.
+       * Exact matching per AGENTS.md §2 and schema.md §2.
+       */
+      const THAI_NOISE_KEYWORDS = [
+        'รายงานขายเงินสด',
+        'รวม',
+        'ตัดใบรับมัดจำ',
+        'หลังคาเหล็ก',
+        'วันที่จาก',
+        'รหัสลูกค้า',
+        'พนักงานขาย'
+      ];
+
+      /**
+       * In-memory seed dataset: 30 realistic invoice rows matching schema.md §3.1 & §5.
+       * Sums to exactly ฿350,000.00 across 10 unique working dates (matches schema.md §5 test fixture).
+       */
+      const SEED_INVOICES = [
+        { date: '01/09/2026', invNo: 'HS2609-001', custCode: 'C-0104', custName: 'บริษัท อะไหล่ยนต์ จำกัด', salesperson: '01', grandTotal: 12500.00 },
+        { date: '02/09/2026', invNo: 'HS2609-002', custCode: 'C-0087', custName: 'ร้านช่างยนต์รุ่งเรือง', salesperson: '02', grandTotal: 8750.50 },
+        { date: '02/09/2026', invNo: 'HS2609-003', custCode: 'C-0104', custName: 'บริษัท อะไหล่ยนต์ จำกัด', salesperson: '01', grandTotal: 21300.00 },
+        { date: '03/09/2026', invNo: 'HS2609-004', custCode: 'C-0219', custName: 'หจก. สยามอะไหล่ซัพพลาย', salesperson: '03', grandTotal: 14200.00 },
+        { date: '03/09/2026', invNo: 'HS2609-005', custCode: 'C-0045', custName: 'อู่ประสิทธิ์การช่าง', salesperson: '01', grandTotal: 6800.00 },
+        { date: '03/09/2026', invNo: 'HS2609-006', custCode: 'C-0312', custName: 'ไทยยนต์เซ็นเตอร์', salesperson: '04', grandTotal: 18500.00 },
+        { date: '04/09/2026', invNo: 'HS2609-007', custCode: 'C-0087', custName: 'ร้านช่างยนต์รุ่งเรือง', salesperson: '02', grandTotal: 9400.00 },
+        { date: '04/09/2026', invNo: 'HS2609-008', custCode: 'C-0155', custName: 'เค.เอ็ม. ออโต้พาร์ท', salesperson: '03', grandTotal: 11200.00 },
+        { date: '04/09/2026', invNo: 'HS2609-009', custCode: 'C-0104', custName: 'บริษัท อะไหล่ยนต์ จำกัด', salesperson: '01', grandTotal: 15600.00 },
+        { date: '05/09/2026', invNo: 'HS2609-010', custCode: 'C-0290', custName: 'สมชายการยาง แอนด์ เซอร์วิส', salesperson: '02', grandTotal: 7350.00 },
+        { date: '05/09/2026', invNo: 'HS2609-011', custCode: 'C-0045', custName: 'อู่ประสิทธิ์การช่าง', salesperson: '04', grandTotal: 8900.00 },
+        { date: '05/09/2026', invNo: 'HS2609-012', custCode: 'C-0219', custName: 'หจก. สยามอะไหล่ซัพพลาย', salesperson: '01', grandTotal: 16400.00 },
+        { date: '07/09/2026', invNo: 'HS2609-013', custCode: 'C-0401', custName: 'พงษ์เจริญมอเตอร์', salesperson: '03', grandTotal: 5450.00 },
+        { date: '07/09/2026', invNo: 'HS2609-014', custCode: 'C-0087', custName: 'ร้านช่างยนต์รุ่งเรือง', salesperson: '02', grandTotal: 12800.00 },
+        { date: '07/09/2026', invNo: 'HS2609-015', custCode: 'C-0312', custName: 'ไทยยนต์เซ็นเตอร์', salesperson: '04', grandTotal: 22100.00 },
+        { date: '08/09/2026', invNo: 'HS2609-016', custCode: 'C-0104', custName: 'บริษัท อะไหล่ยนต์ จำกัด', salesperson: '01', grandTotal: 9600.00 },
+        { date: '08/09/2026', invNo: 'HS2609-017', custCode: 'C-0155', custName: 'เค.เอ็ม. ออโต้พาร์ท', salesperson: '03', grandTotal: 13400.00 },
+        { date: '08/09/2026', invNo: 'HS2609-018', custCode: 'C-0290', custName: 'สมชายการยาง แอนด์ เซอร์วิส', salesperson: '02', grandTotal: 6200.00 },
+        { date: '09/09/2026', invNo: 'HS2609-019', custCode: 'C-0045', custName: 'อู่ประสิทธิ์การช่าง', salesperson: '01', grandTotal: 10750.00 },
+        { date: '09/09/2026', invNo: 'HS2609-020', custCode: 'C-0219', custName: 'หจก. สยามอะไหล่ซัพพลาย', salesperson: '04', grandTotal: 17800.00 },
+        { date: '09/09/2026', invNo: 'HS2609-021', custCode: 'C-0401', custName: 'พงษ์เจริญมอเตอร์', salesperson: '03', grandTotal: 8100.00 },
+        { date: '10/09/2026', invNo: 'HS2609-022', custCode: 'C-0087', custName: 'ร้านช่างยนต์รุ่งเรือง', salesperson: '02', grandTotal: 11500.00 },
+        { date: '10/09/2026', invNo: 'HS2609-023', custCode: 'C-0312', custName: 'ไทยยนต์เซ็นเตอร์', salesperson: '01', grandTotal: 14900.00 },
+        { date: '10/09/2026', invNo: 'HS2609-024', custCode: 'C-0104', custName: 'บริษัท อะไหล่ยนต์ จำกัด', salesperson: '04', grandTotal: 8300.00 },
+        { date: '11/09/2026', invNo: 'HS2609-025', custCode: 'C-0155', custName: 'เค.เอ็ม. ออโต้พาร์ท', salesperson: '03', grandTotal: 16200.00 },
+        { date: '11/09/2026', invNo: 'HS2609-026', custCode: 'C-0290', custName: 'สมชายการยาง แอนด์ เซอร์วิส', salesperson: '02', grandTotal: 5900.00 },
+        { date: '11/09/2026', invNo: 'HS2609-027', custCode: 'C-0045', custName: 'อู่ประสิทธิ์การช่าง', salesperson: '01', grandTotal: 13100.00 },
+        { date: '11/09/2026', invNo: 'HS2609-028', custCode: 'C-0219', custName: 'หจก. สยามอะไหล่ซัพพลาย', salesperson: '04', grandTotal: 9800.00 },
+        { date: '11/09/2026', invNo: 'HS2609-029', custCode: 'C-0401', custName: 'พงษ์เจริญมอเตอร์', salesperson: '03', grandTotal: 7500.00 },
+        { date: '11/09/2026', invNo: 'HS2609-030', custCode: 'C-0312', custName: 'ไทยยนต์เซ็นเตอร์', salesperson: '02', grandTotal: 5699.50 }
+      ];
+
+      /**
+       * In-memory clean invoice array store
+       */
+      let currentInvoices = [];
+
+      /**
+       * Check if raw row contains any Thai structural noise marker.
+       * Exact match against keywords defined in schema.md and AGENTS.md.
+       *
+       * @param {Array} row - Raw row array from SheetJS
+       * @returns {boolean} True if row is structural noise
+       */
+      function isNoiseRow(row) {
+        if (!row || !Array.isArray(row) || row.length === 0) return true;
+        return row.some(cell => {
+          if (cell === null || cell === undefined) return false;
+          const str = String(cell).trim();
+          if (!str) return false;
+          return THAI_NOISE_KEYWORDS.some(keyword => str.includes(keyword));
+        });
+      }
+
+      /**
+       * Check if row matches valid HS invoice criteria.
+       * Column index 1 must start with 'HS'.
+       *
+       * @param {Array} row - Raw row array
+       * @returns {boolean} True if invoice number starts with 'HS'
+       */
+      function isInvoiceRow(row) {
+        if (isNoiseRow(row)) return false;
+        const invNo = String(row[1] || '').trim();
+        return invNo.startsWith(INVOICE_PREFIX);
+      }
+
+      /**
+       * Convert raw Excel date (serial or text) into standard DD/MM/YYYY string.
+       *
+       * @param {any} rawDate
+       * @returns {string} Formatted date string
+       */
+      function formatExcelDate(rawDate) {
+        if (rawDate === null || rawDate === undefined || rawDate === '') {
+          return '';
+        }
+        if (typeof rawDate === 'number') {
+          // Convert Excel date serial number to UTC date
+          const jsDate = new Date(Math.round((rawDate - 25569) * 86400 * 1000));
+          const day = String(jsDate.getUTCDate()).padStart(2, '0');
+          const month = String(jsDate.getUTCMonth() + 1).padStart(2, '0');
+          const year = jsDate.getUTCFullYear();
+          return `${day}/${month}/${year}`;
+        }
+        return String(rawDate).trim();
+      }
+
+      /**
+       * Parse numeric currency amount safely.
+       *
+       * @param {any} val
+       * @returns {number} Numeric float with 2 decimals
+       */
+      function parseNumericAmount(val) {
+        if (typeof val === 'number') return isNaN(val) ? 0 : Math.round(val * 100) / 100;
+        if (!val) return 0;
+        const cleaned = String(val).replace(/,/g, '').trim();
+        const num = parseFloat(cleaned);
+        return isNaN(num) ? 0 : Math.round(num * 100) / 100;
+      }
+
+      /**
+       * Normalize raw row into clean Invoice object (schema.md §3.1).
+       *
+       * @param {Array} row
+       * @returns {Object} Clean normalized Invoice
+       */
+      function normalizeInvoiceRow(row) {
+        return {
+          date: formatExcelDate(row[0]),
+          invNo: String(row[1] || '').trim(),
+          custCode: String(row[2] || '').trim(),
+          custName: String(row[3] || '').trim(),
+          salesperson: String(row[4] || '').trim(),
+          grandTotal: parseNumericAmount(row[7])
+        };
+      }
+
+      /**
+       * Parse 2D raw array from SheetJS into normalized Invoice array:
+       * 1. Strips structural Thai noise rows.
+       * 2. Matches HS invoice prefix.
+       * 3. Normalizes to Invoice schema.
+       *
+       * @param {Array<Array>} rawRows
+       * @returns {Array<Object>} Clean normalized Invoice objects
+       */
+      function parseInvoiceRows(rawRows) {
+        if (!Array.isArray(rawRows)) return [];
+        const cleanInvoices = [];
+
+        for (let i = 0; i < rawRows.length; i++) {
+          const row = rawRows[i];
+          if (!row || !Array.isArray(row)) continue;
+
+          // Step 1: Strip structural / noise rows
+          if (isNoiseRow(row)) {
+            continue;
+          }
+
+          // Step 2: Keep only valid HS invoice rows (column 1 = inv_no)
+          const invNo = String(row[1] || '').trim();
+          if (!invNo.startsWith(INVOICE_PREFIX)) {
+            continue;
+          }
+
+          // Step 3: Normalize to Invoice model
+          const invoice = normalizeInvoiceRow(row);
+          if (invoice.invNo) {
+            cleanInvoices.push(invoice);
+          }
+        }
+
+        return cleanInvoices;
+      }
+
+      /**
+       * Updates UI indicators and logs parsed invoices to console for M1 verification.
+       *
+       * @param {Array<Object>} invoices - Normalized clean invoices
+       * @param {string} sourceName - Source label ("Seed Dataset" or filename)
+       */
+      function applyInvoices(invoices, sourceName) {
+        currentInvoices = invoices;
+
+        // Requirement 7: Console log statement printing parsed clean invoice array for verification
+        console.log(`[M1 Verification] Parsed clean invoice array (${sourceName}):`, currentInvoices);
+
+        // Update DOM status elements
+        const statusMessage = document.getElementById('statusMessage');
+        const invoiceCountTag = document.getElementById('invoiceCountTag');
+        const parseSummaryBadge = document.getElementById('parseSummaryBadge');
+        const badgeDataSource = document.getElementById('badgeDataSource');
+
+        if (statusMessage) {
+          statusMessage.textContent = `Status: Active dataset from ${sourceName} with ${invoices.length} valid HS invoices.`;
+        }
+        if (invoiceCountTag) {
+          invoiceCountTag.textContent = `${invoices.length} Invoices`;
+        }
+        if (parseSummaryBadge) {
+          parseSummaryBadge.textContent = `${invoices.length} valid invoices loaded`;
+        }
+        if (badgeDataSource) {
+          if (sourceName === 'Seed Dataset') {
+            badgeDataSource.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500 mr-2 animate-pulse"></span>Seed Dataset Active';
+          } else {
+            badgeDataSource.innerHTML = `<span class="w-2 h-2 rounded-full bg-blue-500 mr-2"></span>${sourceName}`;
+          }
+        }
+      }
+
+      /**
+       * Parse uploaded .xlsx file client-side via SheetJS
+       *
+       * @param {File} file
+       */
+      function handleFileUpload(file) {
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array', cellDates: false });
+
+            if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+              console.error('Workbook contains no sheets.');
+              alert('Uploaded workbook has no sheets.');
+              return;
+            }
+
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+
+            const cleanInvoices = parseInvoiceRows(rawRows);
+            applyInvoices(cleanInvoices, file.name);
+          } catch (err) {
+            console.error('Error parsing Excel file with SheetJS:', err);
+            const statusMessage = document.getElementById('statusMessage');
+            if (statusMessage) {
+              statusMessage.textContent = `Error parsing file: ${err.message}`;
+            }
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      }
+
+      // DOM Initialization & Event Listeners
+      window.addEventListener('DOMContentLoaded', () => {
+        // Requirement 3: Embed in-memory seed dataset of 30 realistic invoice rows on initial load
+        applyInvoices(SEED_INVOICES, 'Seed Dataset');
+
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const reloadSeedBtn = document.getElementById('reloadSeedBtn');
+
+        if (dropZone && fileInput) {
+          dropZone.addEventListener('click', () => fileInput.click());
+
+          dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('border-blue-500', 'bg-blue-50/60');
+          });
+
+          dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-blue-500', 'bg-blue-50/60');
+          });
+
+          dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-blue-500', 'bg-blue-50/60');
+            if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+              handleFileUpload(e.dataTransfer.files[0]);
+            }
+          });
+
+          fileInput.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files.length > 0) {
+              handleFileUpload(e.target.files[0]);
+            }
+          });
+        }
+
+        if (reloadSeedBtn) {
+          reloadSeedBtn.addEventListener('click', () => {
+            if (fileInput) fileInput.value = '';
+            applyInvoices(SEED_INVOICES, 'Seed Dataset');
+          });
+        }
+      });
+    </script>
+  </body>
+</html>
+
+
