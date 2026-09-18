@@ -42,7 +42,7 @@
               Sales Summary & Forecasting Dashboard
             </h1>
             <span id="badgeMilestone" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
-              Milestone M1
+              Milestone M3
             </span>
           </div>
           <p id="appSubtitle" class="text-sm text-slate-500 mt-1">
@@ -102,43 +102,196 @@
         </div>
       </section>
 
-      <!-- Target Pace & Run-Rate Banner Shell (Reserved for M2 & M3) -->
-      <section id="paceBannerShell" class="bg-white rounded-xl border border-dashed border-slate-300 p-6 opacity-75">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <!-- Target Pace & Run-Rate Banner (Milestone M3 Active) -->
+      <section id="paceBannerSection" class="bg-white rounded-xl border border-slate-200 p-6 shadow-xs space-y-6">
+        <!-- Top Bar: Title & Dynamic Status Badge -->
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 pb-5">
           <div>
-            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Target Pace & Run-Rate Engine (M2 / M3 Shell)</span>
-            <h3 class="text-lg font-bold text-slate-700 mt-0.5">Monthly Pace Projection</h3>
-            <p class="text-xs text-slate-400">Pace status and forecast bands will calculate here in Milestone M2 & M3.</p>
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Pace Engine</span>
+              <span id="badgePaceStatus" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                BEHIND
+              </span>
+            </div>
+            <h3 class="text-xl font-bold text-slate-900 mt-1">Month-End Sales Forecast & Pace</h3>
+            <p id="paceSummaryText" class="text-xs text-slate-500 mt-0.5">
+              Projecting month-end performance from 10 elapsed working days out of 24 scheduled.
+            </p>
           </div>
-          <div class="flex items-center gap-3">
-            <div class="px-4 py-2 rounded-lg bg-slate-100 text-slate-500 text-xs font-semibold">
-              Status: PENDING M2
+
+          <!-- Quick Stat Projection Highlights -->
+          <div class="flex items-center gap-4 bg-slate-50 border border-slate-200 rounded-xl p-3">
+            <div>
+              <div class="text-[11px] font-semibold text-slate-400 uppercase">Run-Rate Projection</div>
+              <div id="bannerRunRateDisplay" class="text-xl font-extrabold text-slate-900">฿ 840,000.00</div>
+            </div>
+            <div class="h-8 w-px bg-slate-200"></div>
+            <div>
+              <div class="text-[11px] font-semibold text-slate-400 uppercase">Variance to Target</div>
+              <div id="bannerTargetVariance" class="text-xl font-extrabold text-amber-600">-฿ 60,000.00</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Interactive Controls Bar -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50/80 border border-slate-200/80 rounded-xl p-4">
+          <div>
+            <label for="inputElapsedDays" class="block text-xs font-semibold text-slate-700 mb-1">
+              Elapsed Working Days
+              <span class="font-normal text-slate-400 text-[11px]">(Auto-detected / editable)</span>
+            </label>
+            <div class="relative">
+              <input
+                id="inputElapsedDays"
+                type="number"
+                min="1"
+                max="31"
+                value="10"
+                class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              <span class="absolute right-3 top-2 text-xs font-medium text-slate-400">days</span>
+            </div>
+          </div>
+
+          <div>
+            <label for="inputTotalDays" class="block text-xs font-semibold text-slate-700 mb-1">
+              Total Working Days
+              <span class="font-normal text-slate-400 text-[11px]">(Scheduled month days)</span>
+            </label>
+            <div class="relative">
+              <input
+                id="inputTotalDays"
+                type="number"
+                min="1"
+                max="31"
+                value="24"
+                class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              <span class="absolute right-3 top-2 text-xs font-medium text-slate-400">days</span>
+            </div>
+          </div>
+
+          <div>
+            <label for="inputMonthlyTarget" class="block text-xs font-semibold text-slate-700 mb-1">
+              Monthly Sales Target
+              <span class="font-normal text-slate-400 text-[11px]">(Adjustable goal in THB)</span>
+            </label>
+            <div class="relative">
+              <span class="absolute left-3 top-2 text-sm font-semibold text-slate-500">฿</span>
+              <input
+                id="inputMonthlyTarget"
+                type="number"
+                step="10000"
+                min="0"
+                value="900000"
+                class="w-full rounded-lg border border-slate-300 bg-white pl-8 pr-3 py-2 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Target Progress Bar -->
+        <div>
+          <div class="flex items-center justify-between text-xs mb-1.5 font-medium">
+            <span class="text-slate-600">
+              Target Progress: <strong id="progressPctText" class="text-slate-900">38.9%</strong>
+              (<span id="progressSalesText">฿ 350,000.00</span> / <span id="progressTargetText">฿ 900,000.00</span>)
+            </span>
+            <span id="progressRemainingText" class="text-slate-500">฿ 550,000.00 remaining</span>
+          </div>
+          <div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200">
+            <div
+              id="progressBarFill"
+              class="bg-blue-600 h-3 rounded-full transition-all duration-300 ease-out"
+              style="width: 38.9%"
+            ></div>
+          </div>
+        </div>
+
+        <!-- Forecast Range Display: Low, Base, High -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Confidence Band Projections (±10% Variance)
+            </span>
+            <span class="text-xs text-slate-400">Calculated via pure calculateForecastRange()</span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <!-- Low Projection Card -->
+            <div id="forecastLowCard" class="bg-slate-50/90 rounded-xl border border-slate-200 p-4">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold text-slate-500 uppercase">Conservative (Low)</span>
+                <span class="text-[11px] font-semibold text-slate-400">-10%</span>
+              </div>
+              <div id="forecastLowVal" class="text-xl font-bold text-slate-800 mt-2">฿ 756,000.00</div>
+              <div class="text-xs text-slate-400 mt-1">Lower statistical threshold</div>
+            </div>
+
+            <!-- Base Projection Card -->
+            <div id="forecastBaseCard" class="bg-blue-50/60 rounded-xl border border-blue-200 p-4">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold text-blue-700 uppercase">Expected (Base Run Rate)</span>
+                <span class="text-[11px] font-semibold text-blue-600">Base</span>
+              </div>
+              <div id="forecastBaseVal" class="text-xl font-extrabold text-blue-950 mt-2">฿ 840,000.00</div>
+              <div class="text-xs text-blue-600/80 mt-1">Standard linear extrapolation</div>
+            </div>
+
+            <!-- High Projection Card -->
+            <div id="forecastHighCard" class="bg-slate-50/90 rounded-xl border border-slate-200 p-4">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold text-slate-500 uppercase">Optimistic (High)</span>
+                <span class="text-[11px] font-semibold text-slate-400">+10%</span>
+              </div>
+              <div id="forecastHighVal" class="text-xl font-bold text-slate-800 mt-2">฿ 924,000.00</div>
+              <div class="text-xs text-slate-400 mt-1">Upper statistical threshold</div>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- Headline Metric KPI Cards Shell (Reserved for M3) -->
-      <section id="kpiSectionShell" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 opacity-75">
-        <div id="kpiCardSales" class="bg-white rounded-xl border border-dashed border-slate-300 p-5">
-          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Sales MTD (M3)</div>
-          <div class="text-2xl font-bold text-slate-500 mt-2">฿ --</div>
-          <div class="text-xs text-slate-400 mt-1">Sum of valid HS invoices</div>
+      <!-- Headline Metric KPI Cards (Milestone M3 Active) -->
+      <section id="kpiSection" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- KPI 1: Sales to Date -->
+        <div id="kpiCardSales" class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Sales to Date (MTD)</span>
+            <span id="kpiInvoicesSub" class="text-xs font-medium text-slate-400">30 Invoices</span>
+          </div>
+          <div id="kpiSalesVal" class="text-2xl font-bold text-slate-900 mt-2">฿ 350,000.00</div>
+          <div id="kpiSalesSub" class="text-xs text-slate-500 mt-1">Sum of valid HS cash invoices</div>
         </div>
-        <div id="kpiCardInvoices" class="bg-white rounded-xl border border-dashed border-slate-300 p-5">
-          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Invoices (M3)</div>
-          <div class="text-2xl font-bold text-slate-500 mt-2">--</div>
-          <div class="text-xs text-slate-400 mt-1">Parsed invoice count</div>
+
+        <!-- KPI 2: Projected Total -->
+        <div id="kpiCardProjected" class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Projected Total</span>
+            <span class="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded">Month End</span>
+          </div>
+          <div id="kpiProjectedVal" class="text-2xl font-bold text-slate-900 mt-2">฿ 840,000.00</div>
+          <div id="kpiProjectedSub" class="text-xs text-slate-500 mt-1">Based on 10 of 24 days</div>
         </div>
-        <div id="kpiCardCustomers" class="bg-white rounded-xl border border-dashed border-slate-300 p-5">
-          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Unique Customers (M3)</div>
-          <div class="text-2xl font-bold text-slate-500 mt-2">--</div>
-          <div class="text-xs text-slate-400 mt-1">Distinct customer accounts</div>
+
+        <!-- KPI 3: Target Pace -->
+        <div id="kpiCardPace" class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Target Pace</span>
+            <span id="kpiPaceBadge" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-800">
+              BEHIND
+            </span>
+          </div>
+          <div id="kpiPaceVal" class="text-2xl font-bold text-amber-600 mt-2">-฿ 60,000.00</div>
+          <div id="kpiPaceSub" class="text-xs text-slate-500 mt-1">Target: ฿ 900,000.00</div>
         </div>
-        <div id="kpiCardAvgValue" class="bg-white rounded-xl border border-dashed border-slate-300 p-5">
-          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Avg Invoice Value (M3)</div>
-          <div class="text-2xl font-bold text-slate-500 mt-2">฿ --</div>
-          <div class="text-xs text-slate-400 mt-1">Mean value per transaction</div>
+
+        <!-- KPI 4: Run Rate -->
+        <div id="kpiCardRunRate" class="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Daily Run Rate</span>
+            <span class="text-xs font-medium text-slate-400">Per Day</span>
+          </div>
+          <div id="kpiRunRateVal" class="text-2xl font-bold text-slate-900 mt-2">฿ 35,000.00</div>
+          <div id="kpiRunRateSub" class="text-xs text-slate-500 mt-1">Avg ฿ 11,666.67 / invoice</div>
         </div>
       </section>
 
@@ -239,6 +392,255 @@
        * In-memory clean invoice array store
        */
       let currentInvoices = [];
+
+      /* ==========================================================================
+         MILESTONE M2: PURE MATH & FORECAST ENGINE (ISOLATED - NO DOM/UI ACCESS)
+         All functions are pure: no DOM, no window, no charts.
+         ========================================================================== */
+
+      /**
+       * Pure math calculation for projected month-end sales run rate.
+       * Formula: runRate = (salesToDate / elapsedWorkingDays) * totalWorkingDays
+       *
+       * @param {number} salesToDate - Cumulative sales MTD in THB
+       * @param {number} elapsedWorkingDays - Number of working days completed
+       * @param {number} totalWorkingDays - Total scheduled working days in month
+       * @returns {number} Projected month-end run rate rounded to 2 decimal places
+       */
+      function calculateRunRate(salesToDate, elapsedWorkingDays, totalWorkingDays) {
+        if (typeof salesToDate !== 'number' || typeof elapsedWorkingDays !== 'number' || typeof totalWorkingDays !== 'number') {
+          return 0;
+        }
+        if (isNaN(salesToDate) || isNaN(elapsedWorkingDays) || isNaN(totalWorkingDays)) {
+          return 0;
+        }
+        if (salesToDate <= 0 || elapsedWorkingDays <= 0 || totalWorkingDays <= 0) {
+          return 0;
+        }
+        const rate = (salesToDate / elapsedWorkingDays) * totalWorkingDays;
+        return Math.round(rate * 100) / 100;
+      }
+
+      /**
+       * Pure math calculation for low, base, and high forecast projection band.
+       * Uses bounded variance band (default ±10% via DEFAULT_VARIANCE_BAND).
+       *
+       * @param {number} runRate - Base projected sales run rate
+       * @param {number} [variancePercentage=DEFAULT_VARIANCE_BAND] - Variance fraction (e.g. 0.10)
+       * @returns {{ low: number, base: number, high: number }} Bounded forecast projections
+       */
+      function calculateForecastRange(runRate, variancePercentage = DEFAULT_VARIANCE_BAND) {
+        if (typeof runRate !== 'number' || isNaN(runRate) || runRate <= 0) {
+          return { low: 0, base: 0, high: 0 };
+        }
+        const variance = (typeof variancePercentage === 'number' && !isNaN(variancePercentage) && variancePercentage >= 0)
+          ? variancePercentage
+          : DEFAULT_VARIANCE_BAND;
+
+        const low = Math.round((runRate * (1 - variance)) * 100) / 100;
+        const base = Math.round(runRate * 100) / 100;
+        const high = Math.round((runRate * (1 + variance)) * 100) / 100;
+
+        return { low, base, high };
+      }
+
+      /**
+       * Pure function to determine target pace indicator ('AHEAD', 'ON_TRACK', 'BEHIND').
+       * Compares base projection against monthly target with a ±5% tolerance band.
+       *
+       * @param {number} baseProjection - Base projected month-end sales
+       * @param {number} monthlyTarget - Target sales revenue for the month
+       * @returns {'AHEAD'|'ON_TRACK'|'BEHIND'} Pace indicator
+       */
+      function determineTargetPace(baseProjection, monthlyTarget) {
+        if (typeof baseProjection !== 'number' || isNaN(baseProjection)) baseProjection = 0;
+        if (typeof monthlyTarget !== 'number' || isNaN(monthlyTarget)) monthlyTarget = 0;
+
+        if (monthlyTarget <= 0) {
+          return baseProjection > 0 ? 'AHEAD' : 'ON_TRACK';
+        }
+
+        // Standard pace tolerance band (±5% around monthly target)
+        const PACE_TOLERANCE = 0.05;
+        const upperThreshold = monthlyTarget * (1 + PACE_TOLERANCE);
+        const lowerThreshold = monthlyTarget * (1 - PACE_TOLERANCE);
+
+        if (baseProjection > upperThreshold) {
+          return 'AHEAD';
+        }
+        if (baseProjection < lowerThreshold) {
+          return 'BEHIND';
+        }
+        return 'ON_TRACK';
+      }
+
+      /**
+       * Pure function calculating Mean Absolute Percentage Error (MAPE).
+       * Formula: (1/n) * sum(|(actual - forecast) / actual|) * 100
+       *
+       * @param {number[]} forecastValues - Array of forecasted values
+       * @param {number[]} actualValues - Array of actual ground-truth values
+       * @returns {number} MAPE expressed as a percentage rounded to 2 decimal places
+       */
+      function mape(forecastValues, actualValues) {
+        if (!Array.isArray(forecastValues) || !Array.isArray(actualValues)) {
+          return 0;
+        }
+        const n = Math.min(forecastValues.length, actualValues.length);
+        if (n === 0) {
+          return 0;
+        }
+
+        let sumAbsolutePercentageError = 0;
+        let validCount = 0;
+
+        for (let i = 0; i < n; i++) {
+          const actual = actualValues[i];
+          const forecast = forecastValues[i];
+
+          if (typeof actual !== 'number' || typeof forecast !== 'number' || isNaN(actual) || isNaN(forecast)) {
+            continue;
+          }
+
+          if (actual === 0) {
+            if (forecast === 0) {
+              validCount++;
+            } else {
+              sumAbsolutePercentageError += Math.abs(forecast);
+              validCount++;
+            }
+          } else {
+            sumAbsolutePercentageError += Math.abs((actual - forecast) / actual);
+            validCount++;
+          }
+        }
+
+        if (validCount === 0) return 0;
+        return Math.round((sumAbsolutePercentageError / validCount) * 100 * 100) / 100;
+      }
+
+      /**
+       * Self-contained verification engine for pure math functions.
+       * Executes 5 explicit hand-calculated test cases and logs PASS/FAIL to DevTools console.
+       *
+       * @returns {{ allPassed: boolean, testResults: Array }}
+       */
+      function runChecks() {
+        const testResults = [];
+
+        // Case 1: Base Run Rate (salesToDate = 350000, elapsed = 10, total = 24 -> expected 840000)
+        const c1Actual = calculateRunRate(350000, 10, 24);
+        const c1Expected = 840000;
+        const c1Pass = Math.abs(c1Actual - c1Expected) < 0.001;
+        testResults.push({
+          caseNum: 1,
+          name: 'Base Run Rate Calculation',
+          description: 'salesToDate = 350000, elapsed = 10, total = 24 -> expected 840000',
+          passed: c1Pass,
+          expected: c1Expected,
+          actual: c1Actual
+        });
+
+        // Case 2: Forecast Range (runRate = 840000, variance = 0.10 -> low: 756000, base: 840000, high: 924000)
+        const c2Actual = calculateForecastRange(840000, 0.10);
+        const c2Expected = { low: 756000, base: 840000, high: 924000 };
+        const c2Pass = c2Actual.low === c2Expected.low &&
+                       c2Actual.base === c2Expected.base &&
+                       c2Actual.high === c2Expected.high;
+        testResults.push({
+          caseNum: 2,
+          name: 'Forecast Range (Bounded ±10%)',
+          description: 'runRate = 840000, variance = 0.10 -> low: 756000, base: 840000, high: 924000',
+          passed: c2Pass,
+          expected: c2Expected,
+          actual: c2Actual
+        });
+
+        // Case 3: Zero sales / zero days division safety (salesToDate = 0 or elapsedWorkingDays = 0 -> returns 0 without crashing/NaN)
+        const c3_zeroSales = calculateRunRate(0, 10, 24);
+        const c3_zeroDays = calculateRunRate(350000, 0, 24);
+        const c3_bothZero = calculateRunRate(0, 0, 24);
+        const c3_zeroTotal = calculateRunRate(350000, 10, 0);
+        const c3_zeroRange = calculateForecastRange(0);
+        const c3Pass = c3_zeroSales === 0 &&
+                       c3_zeroDays === 0 &&
+                       c3_bothZero === 0 &&
+                       c3_zeroTotal === 0 &&
+                       c3_zeroRange.base === 0 &&
+                       !isNaN(c3_zeroSales) &&
+                       !isNaN(c3_zeroDays) &&
+                       !isNaN(c3_bothZero);
+        testResults.push({
+          caseNum: 3,
+          name: 'Zero Sales / Zero Days Division Safety',
+          description: 'salesToDate = 0 or elapsedWorkingDays = 0 -> returns 0 without crashing/NaN',
+          passed: c3Pass,
+          expected: '0 for all zero/invalid inputs without NaN/crash',
+          actual: { zeroSales: c3_zeroSales, zeroDays: c3_zeroDays, bothZero: c3_bothZero, zeroTotal: c3_zeroTotal, zeroRangeBase: c3_zeroRange.base }
+        });
+
+        // Case 4: Target Pace indicator assignment (compares base vs target to assign 'AHEAD', 'ON_TRACK', 'BEHIND')
+        const c4Ahead = determineTargetPace(950000, 900000);   // +5.5% -> AHEAD
+        const c4OnTrack = determineTargetPace(900000, 900000); // 0.0% -> ON_TRACK
+        const c4Behind = determineTargetPace(840000, 900000);  // -6.7% -> BEHIND
+        const c4Pass = c4Ahead === 'AHEAD' && c4OnTrack === 'ON_TRACK' && c4Behind === 'BEHIND';
+        testResults.push({
+          caseNum: 4,
+          name: 'Target Pace Indicator Assignment',
+          description: "compares base vs target to assign 'AHEAD', 'ON_TRACK', 'BEHIND'",
+          passed: c4Pass,
+          expected: { ahead: 'AHEAD', onTrack: 'ON_TRACK', behind: 'BEHIND' },
+          actual: { ahead: c4Ahead, onTrack: c4OnTrack, behind: c4Behind }
+        });
+
+        // Case 5: MAPE error metric formula check
+        const c5Actuals = [100, 200];
+        const c5Forecasts = [90, 220];
+        const c5Actual = mape(c5Forecasts, c5Actuals);
+        const c5Expected = 10;
+        const c5Pass = Math.abs(c5Actual - c5Expected) < 0.001;
+        testResults.push({
+          caseNum: 5,
+          name: 'MAPE Error Metric Formula',
+          description: 'Actuals: [100, 200], Forecasts: [90, 220] -> Expected MAPE: 10.0%',
+          passed: c5Pass,
+          expected: `${c5Expected}%`,
+          actual: `${c5Actual}%`
+        });
+
+        // Print explicit PASS/FAIL results for each test case in DevTools Console
+        console.group('%c[Milestone M2] Pure Math Verification Checks (runChecks())', 'color: #1d4ed8; font-weight: bold; font-size: 13px;');
+        let allPassed = true;
+        testResults.forEach(res => {
+          if (!res.passed) allPassed = false;
+          const badge = res.passed ? '%cPASS' : '%cFAIL';
+          const badgeStyle = res.passed
+            ? 'background: #16a34a; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold;'
+            : 'background: #dc2626; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold;';
+          console.log(`${badge} Case ${res.caseNum}: ${res.name}`, badgeStyle, {
+            description: res.description,
+            expected: res.expected,
+            actual: res.actual,
+            result: res.passed ? 'PASS' : 'FAIL'
+          });
+        });
+
+        if (allPassed) {
+          console.log('%c✓ PASS: All 5 hand-calculated math verification checks passed.', 'color: #16a34a; font-weight: bold; font-size: 12px;');
+        } else {
+          console.error('✗ FAIL: One or more math verification checks failed.');
+        }
+        console.groupEnd();
+
+        return { allPassed, testResults };
+      }
+
+      // Expose pure math functions and runChecks globally for DevTools inspection
+      window.calculateRunRate = calculateRunRate;
+      window.calculateForecastRange = calculateForecastRange;
+      window.determineTargetPace = determineTargetPace;
+      window.mape = mape;
+      window.runChecks = runChecks;
 
       /**
        * Check if raw row contains any Thai structural noise marker.
@@ -369,6 +771,14 @@
       function applyInvoices(invoices, sourceName) {
         currentInvoices = invoices;
 
+        // Auto-detect elapsed working days from unique dates in the dataset
+        const uniqueDates = new Set(invoices.map(inv => inv.date).filter(Boolean));
+        const detectedDays = uniqueDates.size > 0 ? uniqueDates.size : 1;
+        const inputElapsed = document.getElementById('inputElapsedDays');
+        if (inputElapsed) {
+          inputElapsed.value = detectedDays;
+        }
+
         // Requirement 7: Console log statement printing parsed clean invoice array for verification
         console.log(`[M1 Verification] Parsed clean invoice array (${sourceName}):`, currentInvoices);
 
@@ -394,7 +804,171 @@
             badgeDataSource.innerHTML = `<span class="w-2 h-2 rounded-full bg-blue-500 mr-2"></span>${sourceName}`;
           }
         }
+
+        // Milestone M3: Recompute run-rate, pace, and KPI metrics live
+        updateDashboard();
       }
+
+      /**
+       * Format numeric amount in Thai Baht (฿ xxx,xxx.xx)
+       *
+       * @param {number} amount
+       * @returns {string} Formatted currency string
+       */
+      function formatTHB(amount) {
+        const num = (typeof amount === 'number' && !isNaN(amount)) ? amount : 0;
+        return '฿ ' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+
+      /**
+       * Format variance in Thai Baht with signed prefix (+฿ / -฿)
+       *
+       * @param {number} diff
+       * @returns {string} Formatted signed variance string
+       */
+      function formatVariance(diff) {
+        const num = (typeof diff === 'number' && !isNaN(diff)) ? diff : 0;
+        const prefix = num >= 0 ? '+฿ ' : '-฿ ';
+        const absVal = Math.abs(num).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return prefix + absVal;
+      }
+
+      /**
+       * Milestone M3: Wire pure math calculations to the DOM.
+       * Updates Target Pace, Forecast Range, and Headline KPI cards in real time.
+       */
+      function updateDashboard() {
+        // Step 1: Cumulative sales MTD from current invoices
+        const salesToDate = currentInvoices.reduce((sum, inv) => sum + (inv.grandTotal || 0), 0);
+        const roundedSalesToDate = Math.round(salesToDate * 100) / 100;
+
+        // Step 2: Read interactive controls
+        const inputElapsed = document.getElementById('inputElapsedDays');
+        const inputTotal = document.getElementById('inputTotalDays');
+        const inputTarget = document.getElementById('inputMonthlyTarget');
+
+        const elapsedDays = Math.max(1, parseInt(inputElapsed?.value, 10) || 1);
+        const totalDays = Math.max(1, parseInt(inputTotal?.value, 10) || DEFAULT_TOTAL_WORKING_DAYS);
+        const monthlyTarget = Math.max(0, parseFloat(inputTarget?.value) || 0);
+
+        // Step 3: Pure math engine calculations (from Milestone M2)
+        const runRate = calculateRunRate(roundedSalesToDate, elapsedDays, totalDays);
+        const forecastRange = calculateForecastRange(runRate, DEFAULT_VARIANCE_BAND);
+        const paceStatus = determineTargetPace(runRate, monthlyTarget);
+        const targetVariance = Math.round((runRate - monthlyTarget) * 100) / 100;
+        const variancePercent = monthlyTarget > 0
+          ? Math.round(((runRate - monthlyTarget) / monthlyTarget) * 1000) / 10
+          : 0;
+        const dailyRunRate = elapsedDays > 0 ? Math.round((roundedSalesToDate / elapsedDays) * 100) / 100 : 0;
+        const avgInvoiceValue = currentInvoices.length > 0
+          ? Math.round((roundedSalesToDate / currentInvoices.length) * 100) / 100
+          : 0;
+        const uniqueCustomers = new Set(currentInvoices.map(inv => inv.custCode).filter(Boolean)).size;
+
+        // Step 4: Update Pace Status Badges ('AHEAD', 'ON_TRACK', 'BEHIND')
+        const badgePaceStatus = document.getElementById('badgePaceStatus');
+        const kpiPaceBadge = document.getElementById('kpiPaceBadge');
+        const bannerTargetVariance = document.getElementById('bannerTargetVariance');
+        const kpiPaceVal = document.getElementById('kpiPaceVal');
+
+        let badgeText = 'BEHIND';
+        let badgeClasses = 'bg-amber-100 text-amber-800 border-amber-300';
+        let kpiBadgeClasses = 'bg-amber-100 text-amber-800';
+        let varianceColorClass = 'text-amber-600';
+
+        if (paceStatus === 'AHEAD') {
+          badgeText = 'AHEAD';
+          badgeClasses = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+          kpiBadgeClasses = 'bg-emerald-100 text-emerald-800';
+          varianceColorClass = 'text-emerald-600';
+        } else if (paceStatus === 'ON_TRACK') {
+          badgeText = 'ON TRACK';
+          badgeClasses = 'bg-blue-100 text-blue-800 border-blue-300';
+          kpiBadgeClasses = 'bg-blue-100 text-blue-800';
+          varianceColorClass = 'text-blue-600';
+        }
+
+        if (badgePaceStatus) {
+          badgePaceStatus.textContent = badgeText;
+          badgePaceStatus.className = `inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border ${badgeClasses}`;
+        }
+        if (kpiPaceBadge) {
+          kpiPaceBadge.textContent = badgeText;
+          kpiPaceBadge.className = `inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${kpiBadgeClasses}`;
+        }
+
+        // Step 5: Update Pace Banner displays
+        const bannerRunRateDisplay = document.getElementById('bannerRunRateDisplay');
+        const paceSummaryText = document.getElementById('paceSummaryText');
+        if (bannerRunRateDisplay) {
+          bannerRunRateDisplay.textContent = formatTHB(runRate);
+        }
+        if (bannerTargetVariance) {
+          const varPctStr = `${variancePercent >= 0 ? '+' : ''}${variancePercent.toFixed(1)}%`;
+          bannerTargetVariance.textContent = `${formatVariance(targetVariance)} (${varPctStr})`;
+          bannerTargetVariance.className = `text-xl font-extrabold ${varianceColorClass}`;
+        }
+        if (paceSummaryText) {
+          paceSummaryText.textContent = `Projecting month-end performance from ${elapsedDays} elapsed working days out of ${totalDays} scheduled.`;
+        }
+
+        // Target Progress Bar
+        const progressPct = monthlyTarget > 0 ? (roundedSalesToDate / monthlyTarget) * 100 : 0;
+        const boundedPct = Math.min(Math.max(progressPct, 0), 100);
+        const progressBarFill = document.getElementById('progressBarFill');
+        const progressPctText = document.getElementById('progressPctText');
+        const progressSalesText = document.getElementById('progressSalesText');
+        const progressTargetText = document.getElementById('progressTargetText');
+        const progressRemainingText = document.getElementById('progressRemainingText');
+
+        if (progressBarFill) {
+          progressBarFill.style.width = `${boundedPct.toFixed(1)}%`;
+          if (progressPct >= 100) {
+            progressBarFill.className = 'bg-emerald-500 h-3 rounded-full transition-all duration-300 ease-out';
+          } else {
+            progressBarFill.className = 'bg-blue-600 h-3 rounded-full transition-all duration-300 ease-out';
+          }
+        }
+        if (progressPctText) progressPctText.textContent = `${progressPct.toFixed(1)}%`;
+        if (progressSalesText) progressSalesText.textContent = formatTHB(roundedSalesToDate);
+        if (progressTargetText) progressTargetText.textContent = formatTHB(monthlyTarget);
+        if (progressRemainingText) {
+          const remaining = Math.max(0, monthlyTarget - roundedSalesToDate);
+          progressRemainingText.textContent = `${formatTHB(remaining)} remaining`;
+        }
+
+        // Forecast Range Cards (Low, Base, High)
+        const forecastLowVal = document.getElementById('forecastLowVal');
+        const forecastBaseVal = document.getElementById('forecastBaseVal');
+        const forecastHighVal = document.getElementById('forecastHighVal');
+        if (forecastLowVal) forecastLowVal.textContent = formatTHB(forecastRange.low);
+        if (forecastBaseVal) forecastBaseVal.textContent = formatTHB(forecastRange.base);
+        if (forecastHighVal) forecastHighVal.textContent = formatTHB(forecastRange.high);
+
+        // Step 6: Update Headline Metric KPI Cards
+        const kpiSalesVal = document.getElementById('kpiSalesVal');
+        const kpiInvoicesSub = document.getElementById('kpiInvoicesSub');
+        const kpiProjectedVal = document.getElementById('kpiProjectedVal');
+        const kpiProjectedSub = document.getElementById('kpiProjectedSub');
+        const kpiPaceSub = document.getElementById('kpiPaceSub');
+        const kpiRunRateVal = document.getElementById('kpiRunRateVal');
+        const kpiRunRateSub = document.getElementById('kpiRunRateSub');
+
+        if (kpiSalesVal) kpiSalesVal.textContent = formatTHB(roundedSalesToDate);
+        if (kpiInvoicesSub) kpiInvoicesSub.textContent = `${currentInvoices.length} Invoices (${uniqueCustomers} Cust)`;
+        if (kpiProjectedVal) kpiProjectedVal.textContent = formatTHB(runRate);
+        if (kpiProjectedSub) kpiProjectedSub.textContent = `Based on ${elapsedDays} of ${totalDays} days`;
+        if (kpiPaceVal) {
+          kpiPaceVal.textContent = formatVariance(targetVariance);
+          kpiPaceVal.className = `text-2xl font-bold mt-2 ${varianceColorClass}`;
+        }
+        if (kpiPaceSub) kpiPaceSub.textContent = `Target: ${formatTHB(monthlyTarget)}`;
+        if (kpiRunRateVal) kpiRunRateVal.textContent = `${formatTHB(dailyRunRate)} / day`;
+        if (kpiRunRateSub) kpiRunRateSub.textContent = `Avg ${formatTHB(avgInvoiceValue)} / invoice`;
+      }
+
+      // Expose updateDashboard globally
+      window.updateDashboard = updateDashboard;
 
       /**
        * Parse uploaded .xlsx file client-side via SheetJS
@@ -435,7 +1009,10 @@
 
       // DOM Initialization & Event Listeners
       window.addEventListener('DOMContentLoaded', () => {
-        // Requirement 3: Embed in-memory seed dataset of 30 realistic invoice rows on initial load
+        // Milestone M2 Requirement: Execute pure math verification checks on page load
+        runChecks();
+
+        // Milestone M1 Requirement: Embed in-memory seed dataset of 30 realistic invoice rows on initial load
         applyInvoices(SEED_INVOICES, 'Seed Dataset');
 
         const dropZone = document.getElementById('dropZone');
@@ -475,6 +1052,21 @@
             if (fileInput) fileInput.value = '';
             applyInvoices(SEED_INVOICES, 'Seed Dataset');
           });
+        }
+
+        // Milestone M3: Interactive dynamic control bindings for live recalculation
+        const inputElapsedDays = document.getElementById('inputElapsedDays');
+        const inputTotalDays = document.getElementById('inputTotalDays');
+        const inputMonthlyTarget = document.getElementById('inputMonthlyTarget');
+
+        if (inputElapsedDays) {
+          inputElapsedDays.addEventListener('input', updateDashboard);
+        }
+        if (inputTotalDays) {
+          inputTotalDays.addEventListener('input', updateDashboard);
+        }
+        if (inputMonthlyTarget) {
+          inputMonthlyTarget.addEventListener('input', updateDashboard);
         }
       });
     </script>
