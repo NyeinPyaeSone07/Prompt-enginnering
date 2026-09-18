@@ -41,8 +41,8 @@
             <h1 id="appTitle" class="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
               Sales Summary & Forecasting Dashboard
             </h1>
-            <span id="badgeMilestone" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
-              Milestone M4
+            <span id="badgeMilestone" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+              Milestone M5 (Final)
             </span>
           </div>
           <p id="appSubtitle" class="text-sm text-slate-500 mt-1">
@@ -66,6 +66,24 @@
         </div>
       </header>
 
+      <!-- Notification / Toast Container for Edge Cases & Upload Feedback -->
+      <div id="notificationBanner" class="hidden rounded-xl border p-4 text-sm transition-all duration-300">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex items-start gap-3">
+            <span id="notifIcon" class="mt-0.5 shrink-0"></span>
+            <div>
+              <div id="notifTitle" class="font-semibold"></div>
+              <div id="notifMessage" class="text-xs mt-0.5 text-slate-600"></div>
+            </div>
+          </div>
+          <button id="notifCloseBtn" type="button" class="shrink-0 text-slate-400 hover:text-slate-600 p-1 rounded-md transition" aria-label="Close notification">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
       <!-- Upload Zone (SheetJS File Upload) -->
       <section id="uploadSection" class="bg-white rounded-xl border border-slate-200 p-6 shadow-xs">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
@@ -82,18 +100,32 @@
 
         <div
           id="dropZone"
-          class="border-2 border-dashed border-slate-300 hover:border-blue-500 bg-slate-50/70 hover:bg-blue-50/40 rounded-xl p-6 text-center cursor-pointer transition flex flex-col items-center justify-center gap-2"
+          class="relative border-2 border-dashed border-slate-300 hover:border-blue-500 bg-slate-50/70 hover:bg-blue-50/40 rounded-xl p-6 text-center cursor-pointer transition flex flex-col items-center justify-center gap-2"
         >
           <input type="file" id="fileInput" accept=".xlsx, .xls" class="hidden" />
-          <svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-          </svg>
-          <div class="text-sm font-medium text-slate-700">
-            <span class="text-blue-600 hover:underline">Click to upload</span> or drag and drop
+
+          <!-- Normal Idle State -->
+          <div id="dropZoneIdle" class="flex flex-col items-center justify-center gap-2">
+            <svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            <div class="text-sm font-medium text-slate-700">
+              <span class="text-blue-600 hover:underline">Click to upload</span> or drag and drop
+            </div>
+            <p class="text-xs text-slate-400">
+              Accepts <span class="font-medium text-slate-500">.xlsx / .xls</span> exports (Columns: Date, Invoice #, Cust Code, Cust Name, Salesperson, Amount)
+            </p>
           </div>
-          <p class="text-xs text-slate-400">
-            Accepts <span class="font-medium text-slate-500">.xlsx / .xls</span> exports (Columns: Date, Invoice #, Cust Code, Cust Name, Salesperson, Amount)
-          </p>
+
+          <!-- Loading State (hidden by default) -->
+          <div id="dropZoneLoading" class="hidden flex flex-col items-center justify-center gap-2 py-2">
+            <svg class="animate-spin w-7 h-7 text-blue-600" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+            </svg>
+            <div class="text-sm font-semibold text-slate-800">Reading & Validating Excel Export...</div>
+            <p class="text-xs text-slate-500">Filtering noise rows and verifying cash sales records</p>
+          </div>
         </div>
 
         <div id="uploadStatus" class="mt-4 p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-600 flex items-center justify-between">
@@ -354,17 +386,92 @@
         </div>
       </section>
 
-      <!-- Invoice Table Shell (Reserved for M5) -->
-      <section id="tableSectionShell" class="bg-white rounded-xl border border-dashed border-slate-300 p-6 opacity-75">
-        <div class="flex items-center justify-between mb-4">
+      <!-- Invoice Ledger & Client-Side CSV Export (Milestone M5) -->
+      <section id="tableSection" class="bg-white rounded-xl border border-slate-200 p-6 shadow-xs space-y-4">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-100 pb-4">
           <div>
-            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Recent Invoices (M5 Shell)</span>
-            <h3 class="text-base font-semibold text-slate-700">10 Most Recent Invoices</h3>
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Transaction Ledger</span>
+              <span id="tableBadgeCount" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
+                30 Invoices
+              </span>
+            </div>
+            <h3 class="text-base font-bold text-slate-900 mt-0.5">Cash Sales Invoices (HS Ledger)</h3>
+            <p class="text-xs text-slate-500">Normalized invoice records from cash sales export (สรุปรายงานขายเงินสด)</p>
           </div>
-          <div class="text-xs text-slate-400">Table rendering reserved for Milestone M5</div>
+
+          <!-- Action Controls: Search, Limit Toggle, & CSV Export -->
+          <div class="flex flex-wrap items-center gap-3">
+            <!-- Instant Search Input -->
+            <div class="relative">
+              <input
+                id="invoiceSearchInput"
+                type="text"
+                placeholder="Search invoice, customer, salesperson..."
+                class="w-56 sm:w-64 rounded-lg border border-slate-300 bg-white pl-8 pr-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+
+            <!-- View Limit Toggle -->
+            <button
+              id="toggleRowsBtn"
+              type="button"
+              class="text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 transition"
+            >
+              Show All Rows
+            </button>
+
+            <!-- Export CSV Button -->
+            <button
+              id="exportCsvBtn"
+              type="button"
+              class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition"
+              title="Download clean normalized invoices as CSV"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export CSV
+            </button>
+          </div>
         </div>
-        <div class="h-24 flex items-center justify-center text-slate-400 text-xs bg-slate-50 rounded-lg border border-slate-200">
-          Data table preview and CSV export will render in Milestone M5.
+
+        <!-- Table Container -->
+        <div id="tableContainer" class="overflow-x-auto rounded-lg border border-slate-200">
+          <table id="invoicesTable" class="min-w-full divide-y divide-slate-200 text-left text-xs">
+            <thead class="bg-slate-50 text-slate-600 font-semibold uppercase tracking-wider text-[11px]">
+              <tr>
+                <th scope="col" class="px-4 py-3">#</th>
+                <th scope="col" class="px-4 py-3">Date</th>
+                <th scope="col" class="px-4 py-3">Invoice No.</th>
+                <th scope="col" class="px-4 py-3">Customer Code</th>
+                <th scope="col" class="px-4 py-3">Customer Name</th>
+                <th scope="col" class="px-4 py-3 text-center">Salesperson</th>
+                <th scope="col" class="px-4 py-3 text-right">Grand Total (THB)</th>
+              </tr>
+            </thead>
+            <tbody id="invoicesTableBody" class="divide-y divide-slate-100 bg-white font-normal text-slate-700">
+              <!-- Dynamically populated rows -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Table Empty State -->
+        <div id="tableEmptyState" class="hidden py-12 text-center bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
+          <svg class="w-10 h-10 text-slate-300 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <div class="text-sm font-semibold text-slate-700">No invoices match your view</div>
+          <p class="text-xs text-slate-400 mt-1">Try clearing your search query or reset to the seed dataset.</p>
+        </div>
+
+        <!-- Table Footer / Pagination Info -->
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs text-slate-500 pt-2">
+          <span id="tableShowingText">Showing 10 most recent of 30 invoices</span>
+          <span class="text-slate-500">Filtered Total: <strong id="tableFilteredTotal" class="text-slate-800 font-semibold">฿ 350,000.00</strong></span>
         </div>
       </section>
     </div>
@@ -715,6 +822,7 @@
 
       /**
        * Convert raw Excel date (serial or text) into standard DD/MM/YYYY string.
+       * Handles Excel serial numbers, JS Date objects, ISO strings, and standard DD/MM/YYYY.
        *
        * @param {any} rawDate
        * @returns {string} Formatted date string
@@ -724,44 +832,72 @@
           return '';
         }
         if (typeof rawDate === 'number') {
-          // Convert Excel date serial number to UTC date
-          const jsDate = new Date(Math.round((rawDate - 25569) * 86400 * 1000));
-          const day = String(jsDate.getUTCDate()).padStart(2, '0');
-          const month = String(jsDate.getUTCMonth() + 1).padStart(2, '0');
-          const year = jsDate.getUTCFullYear();
+          if (isNaN(rawDate) || rawDate <= 0) return '';
+          try {
+            // Convert Excel date serial number to UTC date
+            const jsDate = new Date(Math.round((rawDate - 25569) * 86400 * 1000));
+            if (isNaN(jsDate.getTime())) return '';
+            const day = String(jsDate.getUTCDate()).padStart(2, '0');
+            const month = String(jsDate.getUTCMonth() + 1).padStart(2, '0');
+            const year = jsDate.getUTCFullYear();
+            return `${day}/${month}/${year}`;
+          } catch (e) {
+            return '';
+          }
+        }
+        if (rawDate instanceof Date) {
+          if (isNaN(rawDate.getTime())) return '';
+          const day = String(rawDate.getDate()).padStart(2, '0');
+          const month = String(rawDate.getMonth() + 1).padStart(2, '0');
+          const year = rawDate.getFullYear();
           return `${day}/${month}/${year}`;
         }
-        return String(rawDate).trim();
+        const str = String(rawDate).trim();
+        // If YYYY-MM-DD format, normalize to DD/MM/YYYY
+        const ymdMatch = str.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+        if (ymdMatch) {
+          return `${String(ymdMatch[3]).padStart(2, '0')}/${String(ymdMatch[2]).padStart(2, '0')}/${ymdMatch[1]}`;
+        }
+        return str;
       }
 
       /**
        * Parse numeric currency amount safely.
+       * Handles numbers, comma-delimited strings, and accounting parenthesized negatives e.g. (1,500.00).
        *
        * @param {any} val
        * @returns {number} Numeric float with 2 decimals
        */
       function parseNumericAmount(val) {
         if (typeof val === 'number') return isNaN(val) ? 0 : Math.round(val * 100) / 100;
-        if (!val) return 0;
-        const cleaned = String(val).replace(/,/g, '').trim();
+        if (val === null || val === undefined || val === '') return 0;
+        let cleaned = String(val).replace(/,/g, '').trim();
+        // Support parenthesized negative accounting format e.g. (500.00) -> -500.00
+        if (/^\(.*\)$/.test(cleaned)) {
+          cleaned = '-' + cleaned.slice(1, -1).trim();
+        }
         const num = parseFloat(cleaned);
         return isNaN(num) ? 0 : Math.round(num * 100) / 100;
       }
 
       /**
        * Normalize raw row into clean Invoice object (schema.md §3.1).
+       * Gracefully handles missing columns and variable row lengths.
        *
        * @param {Array} row
        * @returns {Object} Clean normalized Invoice
        */
       function normalizeInvoiceRow(row) {
+        if (!Array.isArray(row)) {
+          return { date: '', invNo: '', custCode: '', custName: '', salesperson: '', grandTotal: 0 };
+        }
         return {
           date: formatExcelDate(row[0]),
           invNo: String(row[1] || '').trim(),
           custCode: String(row[2] || '').trim(),
           custName: String(row[3] || '').trim(),
           salesperson: String(row[4] || '').trim(),
-          grandTotal: parseNumericAmount(row[7])
+          grandTotal: parseNumericAmount(row.length > 7 ? row[7] : (row.length > 5 ? row[row.length - 1] : 0))
         };
       }
 
@@ -1387,6 +1523,189 @@
         const dailyAggregates = aggregateDailySales(currentInvoices);
         renderTrajectoryChart(roundedSalesToDate, elapsedDays, totalDays, monthlyTarget, runRate, dailyAggregates);
         renderForecastRangeChart(roundedSalesToDate, elapsedDays, totalDays, forecastRange, dailyAggregates);
+
+        // Step 8: Render Milestone M5 Interactive Invoices Table
+        renderInvoicesTable();
+      }
+
+      /* ==========================================================================
+         MILESTONE M5: TABLE RENDERING, CSV EXPORT, & NOTIFICATIONS
+         ========================================================================== */
+
+      let isShowingAllRows = false;
+      let currentSearchQuery = '';
+
+      /**
+       * Safely escape HTML characters to prevent XSS.
+       *
+       * @param {string} str
+       * @returns {string} Escaped string
+       */
+      function escapeHTML(str) {
+        if (!str) return '';
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      /**
+       * Display toast notification banner for user feedback & edge-case alerts.
+       *
+       * @param {'success'|'warning'|'error'} type
+       * @param {string} title
+       * @param {string} message
+       */
+      function showNotification(type, title, message) {
+        const banner = document.getElementById('notificationBanner');
+        const notifIcon = document.getElementById('notifIcon');
+        const notifTitle = document.getElementById('notifTitle');
+        const notifMessage = document.getElementById('notifMessage');
+        if (!banner || !notifTitle || !notifMessage) return;
+
+        banner.className = 'rounded-xl border p-4 text-sm transition-all duration-300';
+
+        let iconSvg = '';
+        if (type === 'success') {
+          banner.classList.add('bg-emerald-50', 'border-emerald-200', 'text-emerald-900');
+          iconSvg = '<svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+        } else if (type === 'warning') {
+          banner.classList.add('bg-amber-50', 'border-amber-200', 'text-amber-900');
+          iconSvg = '<svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>';
+        } else {
+          banner.classList.add('bg-rose-50', 'border-rose-200', 'text-rose-900');
+          iconSvg = '<svg class="w-5 h-5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+        }
+
+        if (notifIcon) notifIcon.innerHTML = iconSvg;
+        notifTitle.textContent = title;
+        notifMessage.textContent = message;
+
+        banner.classList.remove('hidden');
+
+        if (window._notifTimer) clearTimeout(window._notifTimer);
+        window._notifTimer = setTimeout(() => {
+          banner.classList.add('hidden');
+        }, 6000);
+      }
+
+      /**
+       * Render the Cash Sales Invoices Table with dynamic filtering, pagination toggle, and totals.
+       */
+      function renderInvoicesTable() {
+        const tableBody = document.getElementById('invoicesTableBody');
+        const tableContainer = document.getElementById('tableContainer');
+        const tableEmptyState = document.getElementById('tableEmptyState');
+        const tableShowingText = document.getElementById('tableShowingText');
+        const tableFilteredTotal = document.getElementById('tableFilteredTotal');
+        const tableBadgeCount = document.getElementById('tableBadgeCount');
+        const toggleRowsBtn = document.getElementById('toggleRowsBtn');
+
+        if (!tableBody) return;
+
+        const query = (currentSearchQuery || '').toLowerCase().trim();
+        const filtered = currentInvoices.filter(inv => {
+          if (!query) return true;
+          return (
+            (inv.invNo || '').toLowerCase().includes(query) ||
+            (inv.custName || '').toLowerCase().includes(query) ||
+            (inv.custCode || '').toLowerCase().includes(query) ||
+            (inv.salesperson || '').toLowerCase().includes(query) ||
+            (inv.date || '').toLowerCase().includes(query)
+          );
+        });
+
+        const filteredSum = filtered.reduce((acc, inv) => acc + (inv.grandTotal || 0), 0);
+
+        if (tableBadgeCount) {
+          tableBadgeCount.textContent = `${currentInvoices.length} Invoices`;
+        }
+        if (tableFilteredTotal) {
+          tableFilteredTotal.textContent = formatTHB(filteredSum);
+        }
+
+        if (filtered.length === 0) {
+          if (tableContainer) tableContainer.classList.add('hidden');
+          if (tableEmptyState) tableEmptyState.classList.remove('hidden');
+          if (tableShowingText) tableShowingText.textContent = `Showing 0 of ${currentInvoices.length} invoices`;
+          tableBody.innerHTML = '';
+          return;
+        }
+
+        if (tableContainer) tableContainer.classList.remove('hidden');
+        if (tableEmptyState) tableEmptyState.classList.add('hidden');
+
+        const rowsToDisplay = isShowingAllRows ? filtered : filtered.slice(0, 10);
+        if (tableShowingText) {
+          if (isShowingAllRows || filtered.length <= 10) {
+            tableShowingText.textContent = `Showing all ${filtered.length} matching invoices`;
+          } else {
+            tableShowingText.textContent = `Showing 10 most recent of ${filtered.length} matching invoices`;
+          }
+        }
+
+        if (toggleRowsBtn) {
+          toggleRowsBtn.textContent = isShowingAllRows ? 'Show 10 Rows' : `Show All (${filtered.length})`;
+        }
+
+        tableBody.innerHTML = rowsToDisplay.map((inv, idx) => {
+          const rowNum = idx + 1;
+          return `
+            <tr class="hover:bg-slate-50/80 transition-colors">
+              <td class="px-4 py-2.5 font-mono text-slate-400 text-[11px]">${rowNum}</td>
+              <td class="px-4 py-2.5 whitespace-nowrap text-slate-600 font-medium">${escapeHTML(inv.date)}</td>
+              <td class="px-4 py-2.5 whitespace-nowrap font-mono font-semibold text-blue-700">${escapeHTML(inv.invNo)}</td>
+              <td class="px-4 py-2.5 whitespace-nowrap font-mono text-slate-500">${escapeHTML(inv.custCode)}</td>
+              <td class="px-4 py-2.5 max-w-xs truncate font-medium text-slate-800" title="${escapeHTML(inv.custName)}">${escapeHTML(inv.custName)}</td>
+              <td class="px-4 py-2.5 whitespace-nowrap text-center">
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-600">
+                  ${escapeHTML(inv.salesperson || '-')}
+                </span>
+              </td>
+              <td class="px-4 py-2.5 whitespace-nowrap text-right font-mono font-bold text-slate-900">
+                ${formatTHB(inv.grandTotal)}
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      /**
+       * Export clean normalized invoices directly to CSV in browser with UTF-8 BOM for Thai Excel compatibility.
+       *
+       * @param {Array<Object>} invoices
+       */
+      function exportInvoicesToCSV(invoices) {
+        if (!Array.isArray(invoices) || invoices.length === 0) {
+          showNotification('warning', 'Export Unavailable', 'There are no active invoices to export.');
+          return;
+        }
+
+        const headers = ['Date', 'Invoice No', 'Customer Code', 'Customer Name', 'Salesperson', 'Grand Total (THB)'];
+        const rows = invoices.map(inv => [
+          `"${String(inv.date || '').replace(/"/g, '""')}"`,
+          `"${String(inv.invNo || '').replace(/"/g, '""')}"`,
+          `"${String(inv.custCode || '').replace(/"/g, '""')}"`,
+          `"${String(inv.custName || '').replace(/"/g, '""')}"`,
+          `"${String(inv.salesperson || '').replace(/"/g, '""')}"`,
+          (inv.grandTotal || 0).toFixed(2)
+        ]);
+
+        // UTF-8 BOM (\uFEFF) ensures Excel properly displays Thai script
+        const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `cash_sales_summary_${new Date().toISOString().slice(0, 10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        showNotification('success', 'Export Successful', `Exported ${invoices.length} invoices to CSV.`);
       }
 
       // Expose updateDashboard and chart instances globally
@@ -1395,39 +1714,89 @@
       window.forecastRangeChartInstance = () => forecastRangeChartInstance;
 
       /**
-       * Parse uploaded .xlsx file client-side via SheetJS
+       * Parse uploaded .xlsx file client-side via SheetJS with loading spinner, validation, and error guards.
        *
        * @param {File} file
        */
       function handleFileUpload(file) {
         if (!file) return;
 
+        const ext = file.name.split('.').pop().toLowerCase();
+        if (ext !== 'xlsx' && ext !== 'xls') {
+          showNotification('error', 'Unsupported File Type', 'Please upload a valid Excel spreadsheet (.xlsx or .xls).');
+          return;
+        }
+
+        const dropZoneIdle = document.getElementById('dropZoneIdle');
+        const dropZoneLoading = document.getElementById('dropZoneLoading');
+        if (dropZoneIdle && dropZoneLoading) {
+          dropZoneIdle.classList.add('hidden');
+          dropZoneLoading.classList.remove('hidden');
+        }
+
         const reader = new FileReader();
         reader.onload = function(e) {
-          try {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, { type: 'array', cellDates: false });
+          setTimeout(() => {
+            try {
+              const data = new Uint8Array(e.target.result);
+              const workbook = XLSX.read(data, { type: 'array', cellDates: false });
 
-            if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
-              console.error('Workbook contains no sheets.');
-              alert('Uploaded workbook has no sheets.');
-              return;
+              if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+                showNotification('error', 'Empty Workbook', 'The uploaded Excel file contains no worksheets.');
+                return;
+              }
+
+              const firstSheetName = workbook.SheetNames[0];
+              const worksheet = workbook.Sheets[firstSheetName];
+              if (!worksheet) {
+                showNotification('error', 'Invalid Sheet', 'Could not access the primary sheet in this workbook.');
+                return;
+              }
+
+              const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+
+              if (!Array.isArray(rawRows) || rawRows.length === 0) {
+                showNotification('warning', 'Empty Worksheet', 'The selected sheet contains no rows of data.');
+                return;
+              }
+
+              const cleanInvoices = parseInvoiceRows(rawRows);
+
+              if (cleanInvoices.length === 0) {
+                showNotification(
+                  'warning',
+                  'No Valid Invoices Found',
+                  `No rows matching cash-sales prefix "${INVOICE_PREFIX}" were found in "${file.name}". Previous data was retained.`
+                );
+                return;
+              }
+
+              applyInvoices(cleanInvoices, file.name);
+              showNotification(
+                'success',
+                'Upload Complete',
+                `Successfully loaded and verified ${cleanInvoices.length} valid HS invoices from ${file.name}.`
+              );
+            } catch (err) {
+              console.error('Error parsing Excel file with SheetJS:', err);
+              showNotification('error', 'File Parse Failure', `Could not parse Excel file: ${err.message || 'Unknown error'}`);
+            } finally {
+              if (dropZoneIdle && dropZoneLoading) {
+                dropZoneIdle.classList.remove('hidden');
+                dropZoneLoading.classList.add('hidden');
+              }
             }
+          }, 60);
+        };
 
-            const firstSheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[firstSheetName];
-            const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
-
-            const cleanInvoices = parseInvoiceRows(rawRows);
-            applyInvoices(cleanInvoices, file.name);
-          } catch (err) {
-            console.error('Error parsing Excel file with SheetJS:', err);
-            const statusMessage = document.getElementById('statusMessage');
-            if (statusMessage) {
-              statusMessage.textContent = `Error parsing file: ${err.message}`;
-            }
+        reader.onerror = function() {
+          showNotification('error', 'File Read Error', 'Failed to read the file from disk.');
+          if (dropZoneIdle && dropZoneLoading) {
+            dropZoneIdle.classList.remove('hidden');
+            dropZoneLoading.classList.add('hidden');
           }
         };
+
         reader.readAsArrayBuffer(file);
       }
 
@@ -1442,6 +1811,10 @@
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
         const reloadSeedBtn = document.getElementById('reloadSeedBtn');
+        const notifCloseBtn = document.getElementById('notifCloseBtn');
+        const invoiceSearchInput = document.getElementById('invoiceSearchInput');
+        const toggleRowsBtn = document.getElementById('toggleRowsBtn');
+        const exportCsvBtn = document.getElementById('exportCsvBtn');
 
         if (dropZone && fileInput) {
           dropZone.addEventListener('click', () => fileInput.click());
@@ -1471,10 +1844,44 @@
           });
         }
 
+        if (notifCloseBtn) {
+          notifCloseBtn.addEventListener('click', () => {
+            const banner = document.getElementById('notificationBanner');
+            if (banner) banner.classList.add('hidden');
+            if (window._notifTimer) clearTimeout(window._notifTimer);
+          });
+        }
+
+        if (invoiceSearchInput) {
+          invoiceSearchInput.addEventListener('input', (e) => {
+            currentSearchQuery = e.target.value;
+            renderInvoicesTable();
+          });
+        }
+
+        if (toggleRowsBtn) {
+          toggleRowsBtn.addEventListener('click', () => {
+            isShowingAllRows = !isShowingAllRows;
+            renderInvoicesTable();
+          });
+        }
+
+        if (exportCsvBtn) {
+          exportCsvBtn.addEventListener('click', () => {
+            exportInvoicesToCSV(currentInvoices);
+          });
+        }
+
         if (reloadSeedBtn) {
           reloadSeedBtn.addEventListener('click', () => {
             if (fileInput) fileInput.value = '';
+            if (invoiceSearchInput) {
+              invoiceSearchInput.value = '';
+              currentSearchQuery = '';
+            }
+            isShowingAllRows = false;
             applyInvoices(SEED_INVOICES, 'Seed Dataset');
+            showNotification('success', 'Reset Complete', 'Restored 30-invoice in-memory seed dataset.');
           });
         }
 
