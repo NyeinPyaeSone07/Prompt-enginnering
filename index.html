@@ -102,7 +102,7 @@
           id="dropZone"
           class="relative border-2 border-dashed border-slate-300 hover:border-blue-500 bg-slate-50/70 hover:bg-blue-50/40 rounded-xl p-6 text-center cursor-pointer transition flex flex-col items-center justify-center gap-2"
         >
-          <input type="file" id="fileInput" accept=".xlsx, .xls" class="hidden" />
+          <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" class="hidden" />
 
           <!-- Normal Idle State -->
           <div id="dropZoneIdle" class="flex flex-col items-center justify-center gap-2">
@@ -113,7 +113,7 @@
               <span class="text-blue-600 hover:underline">Click to upload</span> or drag and drop
             </div>
             <p class="text-xs text-slate-400">
-              Accepts <span class="font-medium text-slate-500">.xlsx / .xls</span> exports (Columns: Date, Invoice #, Cust Code, Cust Name, Salesperson, Amount)
+              Accepts <span class="font-medium text-slate-500">.xlsx / .xls / .csv</span> exports (Columns: Date, Invoice #, Cust Code, Cust Name, Salesperson, Amount)
             </p>
           </div>
 
@@ -537,9 +537,19 @@
       ];
 
       /**
-       * In-memory clean invoice array store
+       * Global application state container with synchronized rawInvoices array
        */
       let currentInvoices = [];
+      const state = {
+        get rawInvoices() {
+          return currentInvoices;
+        },
+        set rawInvoices(val) {
+          currentInvoices = Array.isArray(val) ? val : [];
+        },
+        sourceName: 'Seed Dataset'
+      };
+      window.state = state;
 
       /* ==========================================================================
          MILESTONE M2: PURE MATH & FORECAST ENGINE (ISOLATED - NO DOM/UI ACCESS)
@@ -808,16 +818,63 @@
       }
 
       /**
-       * Check if row matches valid HS invoice criteria.
-       * Column index 1 must start with 'HS'.
+       * Validates whether a value represents a valid invoice identifier.
+       * Supports 'HS' prefix, relaxed prefixes ('INV-', 'SO-', 'IV-', 'RC-', 'CS-', etc.),
+       * and standard numeric or alphanumeric IDs (e.g. 10024, 202409001).
+       * Filters out Thai structural noise keywords and table header labels.
+       *
+       * @param {any} val
+       * @returns {boolean}
+       */
+      function isValidInvoiceIdentifier(val) {
+        if (val === null || val === undefined) return false;
+        const str = String(val).trim();
+        if (!str) return false;
+
+        // 1. Filter out known Thai structural noise keywords
+        if (THAI_NOISE_KEYWORDS.some(kw => str.includes(kw))) return false;
+
+        // 2. Filter out typical table header labels (English & Thai)
+        const lower = str.toLowerCase();
+        const headerTokens = [
+          'invoice', 'invoice no', 'invoice no.', 'inv no', 'inv no.', 'invno', 'inv_no',
+          'เลขที่', 'เลขที่ใบกำกับ', 'เลขที่เอกสาร', 'เอกสาร', 'ลำดับ', 'no', 'no.',
+          'doc no', 'doc no.', 'doc_no', 'document no', 'document number', 'order no',
+          'ใบเสร็จ', 'ใบส่งของ', 'tax invoice', 'bill no'
+        ];
+        if (headerTokens.includes(lower)) return false;
+
+        // 3. Preferred HS prefix (Thai cash sales report)
+        if (str.toUpperCase().startsWith(INVOICE_PREFIX.toUpperCase())) return true;
+
+        // 4. Relaxed prefixes: INV-, SO-, IV-, RC-, CS-, TAX-, PS-, BILL-, REC-, PO-, etc.
+        if (/^(inv|so|iv|rc|cs|tax|ps|bill|rec|dn|cn|po|order)[-_ /]?[0-9a-z]/i.test(str)) return true;
+
+        // 5. Standard numeric or alphanumeric IDs (e.g. 10024, 202409001, 24-001, 000123)
+        if (/^[A-Za-z0-9\-_#/]{2,}$/.test(str) && /\d/.test(str)) {
+          return true;
+        }
+
+        // 6. Generic alphanumeric IDs with length >= 2
+        if (/^[A-Za-z0-9\-_#/]{2,}$/.test(str)) {
+          return true;
+        }
+
+        return false;
+      }
+
+      /**
+       * Check if row matches valid invoice criteria.
+       * Supports relaxed prefix (HS, INV-, SO-, numeric IDs) in column 1 or column 0.
        *
        * @param {Array} row - Raw row array
-       * @returns {boolean} True if invoice number starts with 'HS'
+       * @returns {boolean} True if row contains valid invoice identifier
        */
       function isInvoiceRow(row) {
         if (isNoiseRow(row)) return false;
-        const invNo = String(row[1] || '').trim();
-        return invNo.startsWith(INVOICE_PREFIX);
+        const col1 = String(row[1] || '').trim();
+        const col0 = String(row[0] || '').trim();
+        return isValidInvoiceIdentifier(col1) || isValidInvoiceIdentifier(col0);
       }
 
       /**
@@ -881,30 +938,199 @@
       }
 
       /**
+       * Construct a normalized Invoice object with aliases for maximum compatibility.
+       * Supports standard properties and aliases for Date, date, Invoice, invNo, Amount, amount, Total, total, sales.
+       *
+       * @param {Object} param0
+       * @returns {Object} Clean normalized Invoice
+       */
+      function createNormalizedInvoice({ date, invNo, custCode, custName, salesperson, grandTotal }) {
+        const inv = {
+          date: date || '',
+          invNo: invNo || '',
+          custCode: custCode || '',
+          custName: custName || '',
+          salesperson: salesperson || '',
+          grandTotal: typeof grandTotal === 'number' && !isNaN(grandTotal) ? grandTotal : 0,
+
+          // Key aliases mapping Date, date, Invoice, invoice, Amount, amount, Total, total, sales, Sales
+          get Date() { return this.date; },
+          set Date(val) { this.date = String(val || '').trim(); },
+
+          get Invoice() { return this.invNo; },
+          set Invoice(val) { this.invNo = String(val || '').trim(); },
+          get invoice() { return this.invNo; },
+          set invoice(val) { this.invNo = String(val || '').trim(); },
+
+          get Amount() { return this.grandTotal; },
+          set Amount(val) { this.grandTotal = parseNumericAmount(val); },
+          get amount() { return this.grandTotal; },
+          set amount(val) { this.grandTotal = parseNumericAmount(val); },
+
+          get Total() { return this.grandTotal; },
+          set Total(val) { this.grandTotal = parseNumericAmount(val); },
+          get total() { return this.grandTotal; },
+          set total(val) { this.grandTotal = parseNumericAmount(val); },
+
+          get sales() { return this.grandTotal; },
+          set sales(val) { this.grandTotal = parseNumericAmount(val); },
+          get Sales() { return this.grandTotal; },
+          set Sales(val) { this.grandTotal = parseNumericAmount(val); }
+        };
+        return inv;
+      }
+
+      /**
+       * Check if an object contains any Thai structural noise marker in its values.
+       *
+       * @param {Object} obj
+       * @returns {boolean}
+       */
+      function isNoiseRowObject(obj) {
+        if (!obj || typeof obj !== 'object') return true;
+        const values = Object.values(obj);
+        return values.some(val => {
+          if (val === null || val === undefined) return false;
+          const str = String(val).trim();
+          if (!str) return false;
+          return THAI_NOISE_KEYWORDS.some(keyword => str.includes(keyword));
+        });
+      }
+
+      /**
+       * Normalize an arbitrary JSON object row into a standard Invoice object.
+       * Maps "Date", "date", "Invoice", "Amount", "amount", "Total", "sales" to standard properties.
+       *
+       * @param {Object} obj
+       * @returns {Object} Normalized Invoice object
+       */
+      function normalizeObjectRow(obj) {
+        if (!obj || typeof obj !== 'object') {
+          return createNormalizedInvoice({ date: '', invNo: '', custCode: '', custName: '', salesperson: '', grandTotal: 0 });
+        }
+
+        // Find date property
+        let rawDate = '';
+        for (const key of Object.keys(obj)) {
+          const k = key.trim().toLowerCase();
+          if (k === 'date' || k === 'วันที่' || k === 'invdate' || k === 'invoicedate') {
+            rawDate = obj[key];
+            break;
+          }
+        }
+
+        // Find invoice property
+        let rawInv = '';
+        for (const key of Object.keys(obj)) {
+          const k = key.trim().toLowerCase();
+          if (k === 'invoice' || k === 'invno' || k === 'invoice no' || k === 'invoice no.' || k === 'invoiceno' || k === 'inv_no' || k === 'เลขที่' || k === 'เลขที่ใบกำกับ') {
+            rawInv = obj[key];
+            break;
+          }
+        }
+
+        // Find customer code
+        let rawCustCode = '';
+        for (const key of Object.keys(obj)) {
+          const k = key.trim().toLowerCase();
+          if (k === 'custcode' || k === 'customer code' || k === 'customercode' || k === 'รหัสลูกค้า' || k === 'code') {
+            rawCustCode = obj[key];
+            break;
+          }
+        }
+
+        // Find customer name
+        let rawCustName = '';
+        for (const key of Object.keys(obj)) {
+          const k = key.trim().toLowerCase();
+          if (k === 'custname' || k === 'customer name' || k === 'customername' || k === 'customer' || k === 'ชื่อลูกค้า' || k === 'name') {
+            rawCustName = obj[key];
+            break;
+          }
+        }
+
+        // Find salesperson
+        let rawSalesperson = '';
+        for (const key of Object.keys(obj)) {
+          const k = key.trim().toLowerCase();
+          if (k === 'salesperson' || k === 'sales' || k === 'sales_rep' || k === 'salesrep' || k === 'พนักงานขาย') {
+            rawSalesperson = obj[key];
+            break;
+          }
+        }
+
+        // Find amount: maps "Amount", "amount", "Total", "total", "sales", "Sales", "grandTotal", "ยอดขาย", "จำนวนเงิน"
+        let rawAmount = 0;
+        for (const key of Object.keys(obj)) {
+          const k = key.trim().toLowerCase();
+          if (k === 'amount' || k === 'total' || k === 'sales' || k === 'grandtotal' || k === 'grand total' || k === 'ยอดขาย' || k === 'จำนวนเงิน' || k === 'price') {
+            rawAmount = obj[key];
+            break;
+          }
+        }
+
+        return createNormalizedInvoice({
+          date: formatExcelDate(rawDate),
+          invNo: String(rawInv || '').trim(),
+          custCode: String(rawCustCode || '').trim(),
+          custName: String(rawCustName || '').trim(),
+          salesperson: String(rawSalesperson || '').trim(),
+          grandTotal: parseNumericAmount(rawAmount)
+        });
+      }
+
+      /**
        * Normalize raw row into clean Invoice object (schema.md §3.1).
-       * Gracefully handles missing columns and variable row lengths.
+       * Gracefully handles missing columns, variable row lengths, and relaxed invoice IDs.
        *
        * @param {Array} row
        * @returns {Object} Clean normalized Invoice
        */
       function normalizeInvoiceRow(row) {
         if (!Array.isArray(row)) {
-          return { date: '', invNo: '', custCode: '', custName: '', salesperson: '', grandTotal: 0 };
+          return createNormalizedInvoice({ date: '', invNo: '', custCode: '', custName: '', salesperson: '', grandTotal: 0 });
         }
-        return {
-          date: formatExcelDate(row[0]),
-          invNo: String(row[1] || '').trim(),
-          custCode: String(row[2] || '').trim(),
-          custName: String(row[3] || '').trim(),
-          salesperson: String(row[4] || '').trim(),
-          grandTotal: parseNumericAmount(row.length > 7 ? row[7] : (row.length > 5 ? row[row.length - 1] : 0))
-        };
+        let invNo = String(row[1] || '').trim();
+        let dateVal = row[0];
+        let custCode = row[2];
+        let custName = row[3];
+        let salesperson = row[4];
+
+        // If col 1 is not valid invoice ID but col 0 is, swap
+        if (!isValidInvoiceIdentifier(invNo) && isValidInvoiceIdentifier(row[0])) {
+          invNo = String(row[0] || '').trim();
+          dateVal = row[1];
+        }
+
+        // Determine grand total
+        let amt = 0;
+        if (row.length > 7 && row[7] !== '' && row[7] !== null && row[7] !== undefined) {
+          amt = parseNumericAmount(row[7]);
+        }
+        if (amt === 0) {
+          for (let c = row.length - 1; c >= 2; c--) {
+            const cellAmt = parseNumericAmount(row[c]);
+            if (cellAmt !== 0) {
+              amt = cellAmt;
+              break;
+            }
+          }
+        }
+
+        return createNormalizedInvoice({
+          date: formatExcelDate(dateVal),
+          invNo: invNo,
+          custCode: String(custCode || '').trim(),
+          custName: String(custName || '').trim(),
+          salesperson: String(salesperson || '').trim(),
+          grandTotal: amt
+        });
       }
 
       /**
        * Parse 2D raw array from SheetJS into normalized Invoice array:
        * 1. Strips structural Thai noise rows.
-       * 2. Matches HS invoice prefix.
+       * 2. Matches valid invoice identifiers (relaxed HS, INV-, SO-, numeric, alphanumeric IDs).
        * 3. Normalizes to Invoice schema.
        *
        * @param {Array<Array>} rawRows
@@ -916,16 +1142,17 @@
 
         for (let i = 0; i < rawRows.length; i++) {
           const row = rawRows[i];
-          if (!row || !Array.isArray(row)) continue;
+          if (!row || !Array.isArray(row) || row.length < 2) continue;
 
           // Step 1: Strip structural / noise rows
           if (isNoiseRow(row)) {
             continue;
           }
 
-          // Step 2: Keep only valid HS invoice rows (column 1 = inv_no)
-          const invNo = String(row[1] || '').trim();
-          if (!invNo.startsWith(INVOICE_PREFIX)) {
+          // Step 2: Check invoice identifier in col 1 or col 0
+          const col1 = String(row[1] || '').trim();
+          const col0 = String(row[0] || '').trim();
+          if (!isValidInvoiceIdentifier(col1) && !isValidInvoiceIdentifier(col0)) {
             continue;
           }
 
@@ -940,13 +1167,64 @@
       }
 
       /**
-       * Updates UI indicators and logs parsed invoices to console for M1 verification.
+       * Convert SheetJS worksheet into clean normalized Invoice objects:
+       * Supports both JSON rows with column header keys and 2D arrays from Thai cash report exports.
+       *
+       * @param {Object} worksheet - SheetJS worksheet
+       * @returns {Array<Object>} Normalized clean invoices
+       */
+      function parseWorksheetToInvoices(worksheet) {
+        if (!worksheet) return [];
+
+        // 1. Try sheet_to_json as JSON rows with headers
+        const jsonRows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+
+        if (Array.isArray(jsonRows) && jsonRows.length > 0) {
+          const sampleKeys = Object.keys(jsonRows[0] || {}).map(k => k.trim().toLowerCase());
+          const hasRecognizedKeys = sampleKeys.some(k =>
+            k === 'date' || k === 'invoice' || k === 'invno' || k === 'amount' ||
+            k === 'total' || k === 'sales' || k === 'grandtotal' || k === 'grand total' ||
+            k === 'custcode' || k === 'custname' || k === 'salesperson' ||
+            k === 'วันที่' || k === 'เลขที่' || k === 'เลขที่ใบกำกับ' || k === 'จำนวนเงิน' || k === 'ยอดขาย'
+          );
+
+          if (hasRecognizedKeys) {
+            const parsedInvoices = [];
+            for (const obj of jsonRows) {
+              if (isNoiseRowObject(obj)) continue;
+              const inv = normalizeObjectRow(obj);
+              if (inv.invNo && isValidInvoiceIdentifier(inv.invNo)) {
+                parsedInvoices.push(inv);
+              } else if (inv.invNo || inv.grandTotal !== 0 || inv.date) {
+                if (!inv.invNo && inv.grandTotal !== 0) {
+                  inv.invNo = `INV-${parsedInvoices.length + 1}`;
+                }
+                parsedInvoices.push(inv);
+              }
+            }
+
+            if (parsedInvoices.length > 0) {
+              return parsedInvoices;
+            }
+          }
+        }
+
+        // 2. 2D array parsing (Thai cash-sales export report with title banners)
+        const raw2DRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+        return parseInvoiceRows(raw2DRows);
+      }
+
+      /**
+       * Updates state and UI indicators, and logs parsed invoices to console for M1 verification.
        *
        * @param {Array<Object>} invoices - Normalized clean invoices
        * @param {string} sourceName - Source label ("Seed Dataset" or filename)
        */
       function applyInvoices(invoices, sourceName) {
-        currentInvoices = invoices;
+        // Crucial: Completely replace/overwrite state.rawInvoices with newly parsed array
+        state.rawInvoices = invoices;
+        state.sourceName = sourceName;
+        currentInvoices = state.rawInvoices;
 
         // Auto-detect elapsed working days from unique dates in the dataset
         const uniqueDates = new Set(invoices.map(inv => inv.date).filter(Boolean));
@@ -956,8 +1234,13 @@
           inputElapsed.value = detectedDays;
         }
 
-        // Requirement 7: Console log statement printing parsed clean invoice array for verification
-        console.log(`[M1 Verification] Parsed clean invoice array (${sourceName}):`, currentInvoices);
+        // Log statement printing parsed clean invoice array for verification
+        console.log(`[M1 Verification] Parsed clean invoice array (${sourceName}):`, state.rawInvoices);
+
+        // Required console log showing loaded row count from uploaded file
+        if (sourceName !== 'Seed Dataset') {
+          console.log(`[M1 Update] Successfully loaded ${state.rawInvoices.length} rows from uploaded file.`);
+        }
 
         // Update DOM status elements
         const statusMessage = document.getElementById('statusMessage');
@@ -982,9 +1265,18 @@
           }
         }
 
-        // Milestone M3: Recompute run-rate, pace, and KPI metrics live
+        // Milestone M3: Trigger live UI recalculation and render
+        renderUI();
+      }
+
+      /**
+       * Global UI render/recalculate function.
+       * Refreshes all KPI cards, pace badges, and Chart.js graphs immediately.
+       */
+      function renderUI() {
         updateDashboard();
       }
+      window.renderUI = renderUI;
 
       /**
        * Format numeric amount in Thai Baht (฿ xxx,xxx.xx)
@@ -1391,8 +1683,13 @@
        * Updates Target Pace, Forecast Range, and Headline KPI cards in real time.
        */
       function updateDashboard() {
+        const invoices = state.rawInvoices || currentInvoices;
+
         // Step 1: Cumulative sales MTD from current invoices
-        const salesToDate = currentInvoices.reduce((sum, inv) => sum + (inv.grandTotal || 0), 0);
+        const salesToDate = invoices.reduce((sum, inv) => {
+          const amt = inv.grandTotal ?? inv.amount ?? inv.Amount ?? inv.total ?? inv.Total ?? inv.sales ?? 0;
+          return sum + (typeof amt === 'number' && !isNaN(amt) ? amt : 0);
+        }, 0);
         const roundedSalesToDate = Math.round(salesToDate * 100) / 100;
 
         // Step 2: Read interactive controls
@@ -1413,10 +1710,10 @@
           ? Math.round(((runRate - monthlyTarget) / monthlyTarget) * 1000) / 10
           : 0;
         const dailyRunRate = elapsedDays > 0 ? Math.round((roundedSalesToDate / elapsedDays) * 100) / 100 : 0;
-        const avgInvoiceValue = currentInvoices.length > 0
-          ? Math.round((roundedSalesToDate / currentInvoices.length) * 100) / 100
+        const avgInvoiceValue = invoices.length > 0
+          ? Math.round((roundedSalesToDate / invoices.length) * 100) / 100
           : 0;
-        const uniqueCustomers = new Set(currentInvoices.map(inv => inv.custCode).filter(Boolean)).size;
+        const uniqueCustomers = new Set(invoices.map(inv => inv.custCode).filter(Boolean)).size;
 
         // Step 4: Update Pace Status Badges ('AHEAD', 'ON_TRACK', 'BEHIND')
         const badgePaceStatus = document.getElementById('badgePaceStatus');
@@ -1605,8 +1902,9 @@
 
         if (!tableBody) return;
 
+        const invoices = state.rawInvoices || currentInvoices;
         const query = (currentSearchQuery || '').toLowerCase().trim();
-        const filtered = currentInvoices.filter(inv => {
+        const filtered = invoices.filter(inv => {
           if (!query) return true;
           return (
             (inv.invNo || '').toLowerCase().includes(query) ||
@@ -1617,10 +1915,13 @@
           );
         });
 
-        const filteredSum = filtered.reduce((acc, inv) => acc + (inv.grandTotal || 0), 0);
+        const filteredSum = filtered.reduce((acc, inv) => {
+          const amt = inv.grandTotal ?? inv.amount ?? inv.Amount ?? inv.total ?? inv.Total ?? inv.sales ?? 0;
+          return acc + (typeof amt === 'number' && !isNaN(amt) ? amt : 0);
+        }, 0);
 
         if (tableBadgeCount) {
-          tableBadgeCount.textContent = `${currentInvoices.length} Invoices`;
+          tableBadgeCount.textContent = `${invoices.length} Invoices`;
         }
         if (tableFilteredTotal) {
           tableFilteredTotal.textContent = formatTHB(filteredSum);
@@ -1629,7 +1930,7 @@
         if (filtered.length === 0) {
           if (tableContainer) tableContainer.classList.add('hidden');
           if (tableEmptyState) tableEmptyState.classList.remove('hidden');
-          if (tableShowingText) tableShowingText.textContent = `Showing 0 of ${currentInvoices.length} invoices`;
+          if (tableShowingText) tableShowingText.textContent = `Showing 0 of ${invoices.length} invoices`;
           tableBody.innerHTML = '';
           return;
         }
@@ -1714,7 +2015,9 @@
       window.forecastRangeChartInstance = () => forecastRangeChartInstance;
 
       /**
-       * Parse uploaded .xlsx file client-side via SheetJS with loading spinner, validation, and error guards.
+       * Parse uploaded .xlsx / .xls / .csv file client-side via SheetJS (XLSX.read) with loading spinner, validation, and error guards.
+       * Converts file into JSON rows, normalizes key names, replaces state.rawInvoices, and triggers live UI updates.
+       * Scans all worksheet tabs in workbook to extract invoice data.
        *
        * @param {File} file
        */
@@ -1722,8 +2025,8 @@
         if (!file) return;
 
         const ext = file.name.split('.').pop().toLowerCase();
-        if (ext !== 'xlsx' && ext !== 'xls') {
-          showNotification('error', 'Unsupported File Type', 'Please upload a valid Excel spreadsheet (.xlsx or .xls).');
+        if (ext !== 'xlsx' && ext !== 'xls' && ext !== 'csv') {
+          showNotification('error', 'Unsupported File Type', 'Please upload a valid Excel or CSV spreadsheet (.xlsx, .xls, .csv).');
           return;
         }
 
@@ -1739,47 +2042,59 @@
           setTimeout(() => {
             try {
               const data = new Uint8Array(e.target.result);
+              // Read workbook using SheetJS XLSX.read
               const workbook = XLSX.read(data, { type: 'array', cellDates: false });
 
               if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
-                showNotification('error', 'Empty Workbook', 'The uploaded Excel file contains no worksheets.');
+                showNotification('error', 'Empty Workbook', 'The uploaded file contains no worksheets.');
                 return;
               }
 
-              const firstSheetName = workbook.SheetNames[0];
-              const worksheet = workbook.Sheets[firstSheetName];
-              if (!worksheet) {
-                showNotification('error', 'Invalid Sheet', 'Could not access the primary sheet in this workbook.');
-                return;
+              // Flexible Excel/CSV Parsing: Scan all worksheet tabs (not just workbook.SheetNames[0])
+              let allParsedInvoices = [];
+              for (const sheetName of workbook.SheetNames) {
+                const worksheet = workbook.Sheets[sheetName];
+                if (!worksheet) continue;
+                const sheetInvoices = parseWorksheetToInvoices(worksheet);
+                if (Array.isArray(sheetInvoices) && sheetInvoices.length > 0) {
+                  allParsedInvoices = allParsedInvoices.concat(sheetInvoices);
+                }
               }
 
-              const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
-
-              if (!Array.isArray(rawRows) || rawRows.length === 0) {
-                showNotification('warning', 'Empty Worksheet', 'The selected sheet contains no rows of data.');
-                return;
+              // Deduplicate exact duplicate rows across multiple tabs if any
+              const seen = new Set();
+              const parsedData = [];
+              for (const inv of allParsedInvoices) {
+                const key = `${inv.invNo}|${inv.date}|${inv.grandTotal}|${inv.custCode}`;
+                if (!seen.has(key)) {
+                  seen.add(key);
+                  parsedData.push(inv);
+                }
               }
 
-              const cleanInvoices = parseInvoiceRows(rawRows);
-
-              if (cleanInvoices.length === 0) {
+              if (!parsedData || parsedData.length === 0) {
                 showNotification(
                   'warning',
                   'No Valid Invoices Found',
-                  `No rows matching cash-sales prefix "${INVOICE_PREFIX}" were found in "${file.name}". Previous data was retained.`
+                  `No valid sales invoices were found across ${workbook.SheetNames.length} sheet tab(s) in "${file.name}". Previous data was retained.`
                 );
                 return;
               }
 
-              applyInvoices(cleanInvoices, file.name);
+              // Completely replace/overwrite default state's raw invoice array with newly parsed array
+              state.rawInvoices = parsedData;
+
+              // Apply to state and trigger live UI updates (renderUI / updateDashboard)
+              applyInvoices(state.rawInvoices, file.name);
+
               showNotification(
                 'success',
                 'Upload Complete',
-                `Successfully loaded and verified ${cleanInvoices.length} valid HS invoices from ${file.name}.`
+                `Successfully loaded ${parsedData.length} valid invoices across ${workbook.SheetNames.length} sheet tab(s) from ${file.name}.`
               );
             } catch (err) {
-              console.error('Error parsing Excel file with SheetJS:', err);
-              showNotification('error', 'File Parse Failure', `Could not parse Excel file: ${err.message || 'Unknown error'}`);
+              console.error('Error parsing file with SheetJS:', err);
+              showNotification('error', 'File Parse Failure', `Could not parse file: ${err.message || 'Unknown error'}`);
             } finally {
               if (dropZoneIdle && dropZoneLoading) {
                 dropZoneIdle.classList.remove('hidden');
@@ -1801,7 +2116,7 @@
       }
 
       // DOM Initialization & Event Listeners
-      window.addEventListener('DOMContentLoaded', () => {
+      function initApp() {
         // Milestone M2 Requirement: Execute pure math verification checks on page load
         runChecks();
 
@@ -1816,30 +2131,51 @@
         const toggleRowsBtn = document.getElementById('toggleRowsBtn');
         const exportCsvBtn = document.getElementById('exportCsvBtn');
 
+        // Prevent browser default window drag/drop behaviors
+        window.addEventListener('dragover', (e) => e.preventDefault(), false);
+        window.addEventListener('drop', (e) => e.preventDefault(), false);
+
         if (dropZone && fileInput) {
-          dropZone.addEventListener('click', () => fileInput.click());
+          dropZone.addEventListener('click', () => {
+            try {
+              fileInput.click();
+            } catch (err) {
+              console.warn('fileInput.click() trigger fallback:', err);
+            }
+          });
+
+          dropZone.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.add('border-blue-500', 'bg-blue-50/60');
+          });
 
           dropZone.addEventListener('dragover', (e) => {
             e.preventDefault();
+            e.stopPropagation();
             dropZone.classList.add('border-blue-500', 'bg-blue-50/60');
           });
 
           dropZone.addEventListener('dragleave', (e) => {
             e.preventDefault();
+            e.stopPropagation();
             dropZone.classList.remove('border-blue-500', 'bg-blue-50/60');
           });
 
           dropZone.addEventListener('drop', (e) => {
             e.preventDefault();
+            e.stopPropagation();
             dropZone.classList.remove('border-blue-500', 'bg-blue-50/60');
-            if (e.dataTransfer && e.dataTransfer.files.length > 0) {
-              handleFileUpload(e.dataTransfer.files[0]);
+            const dt = e.dataTransfer;
+            if (dt && dt.files && dt.files.length > 0) {
+              handleFileUpload(dt.files[0]);
             }
           });
 
           fileInput.addEventListener('change', (e) => {
-            if (e.target.files && e.target.files.length > 0) {
-              handleFileUpload(e.target.files[0]);
+            const files = e.target.files;
+            if (files && files.length > 0) {
+              handleFileUpload(files[0]);
             }
           });
         }
@@ -1868,7 +2204,7 @@
 
         if (exportCsvBtn) {
           exportCsvBtn.addEventListener('click', () => {
-            exportInvoicesToCSV(currentInvoices);
+            exportInvoicesToCSV(state.rawInvoices || currentInvoices);
           });
         }
 
@@ -1899,7 +2235,13 @@
         if (inputMonthlyTarget) {
           inputMonthlyTarget.addEventListener('input', updateDashboard);
         }
-      });
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initApp);
+      } else {
+        initApp();
+      }
     </script>
   </body>
 </html>
