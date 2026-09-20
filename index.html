@@ -395,6 +395,12 @@
               <span id="tableBadgeCount" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
                 30 Invoices
               </span>
+              <span id="pairedDeduplicationBadge" class="hidden items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                <svg class="w-3 h-3 mr-1 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                </svg>
+                <span id="pairedDeduplicationText">Paired AI Deposits Excluded</span>
+              </span>
             </div>
             <h3 class="text-base font-bold text-slate-900 mt-0.5">Cash Sales Invoices (HS Ledger)</h3>
             <p class="text-xs text-slate-500">Normalized invoice records from cash sales export (สรุปรายงานขายเงินสด)</p>
@@ -439,6 +445,50 @@
           </div>
         </div>
 
+        <!-- Ledger View & Deduplication Filter Bar -->
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-2 bg-slate-50 rounded-lg border border-slate-200/80 text-xs">
+          <div class="flex items-center gap-1.5 text-slate-600 font-medium">
+            <span class="text-slate-400">Ledger View:</span>
+            <div class="inline-flex p-0.5 rounded-md bg-white border border-slate-200">
+              <button
+                id="btnLedgerDedup"
+                type="button"
+                class="px-2.5 py-1 rounded text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200/80 transition shadow-2xs"
+                title="Deduplicate paired advance deposits (AI) against cash sales (HS)"
+              >
+                Deduplicated (HS + Standalone AI)
+              </button>
+              <button
+                id="btnLedgerHsOnly"
+                type="button"
+                class="px-2.5 py-1 rounded text-xs font-medium text-slate-600 hover:text-slate-900 border border-transparent transition"
+                title="Strict HS Cash Sales ledger only"
+              >
+                HS Cash Sales Only
+              </button>
+              <button
+                id="btnLedgerAiOnly"
+                type="button"
+                class="px-2.5 py-1 rounded text-xs font-medium text-slate-600 hover:text-slate-900 border border-transparent transition"
+                title="AI Advance/Deposit invoices only"
+              >
+                AI Advance Deposits Only
+              </button>
+              <button
+                id="btnLedgerAll"
+                type="button"
+                class="px-2.5 py-1 rounded text-xs font-medium text-slate-600 hover:text-slate-900 border border-transparent transition"
+                title="Show all unfiltered rows including paired entries"
+              >
+                All Records
+              </button>
+            </div>
+          </div>
+          <span class="text-[11px] text-slate-500">
+            Prevents double-counting paired transactions with identical amounts
+          </span>
+        </div>
+
         <!-- Table Container -->
         <div id="tableContainer" class="overflow-x-auto rounded-lg border border-slate-200">
           <table id="invoicesTable" class="min-w-full divide-y divide-slate-200 text-left text-xs">
@@ -481,9 +531,10 @@
       /**
        * AGENTS.md Named configuration constants
        */
-      const INVOICE_PREFIX = 'HS';
-      const DEFAULT_VARIANCE_BAND = 0.10; // ±10% range for low/high projections
-      const DEFAULT_TOTAL_WORKING_DAYS = 24;
+       const INVOICE_PREFIX = 'HS';
+       const ADVANCE_DEPOSIT_PREFIX = 'AI';
+       const DEFAULT_VARIANCE_BAND = 0.10; // ±10% range for low/high projections
+       const DEFAULT_TOTAL_WORKING_DAYS = 24;
 
       /**
        * Thai structural noise keywords to strip from raw report rows.
@@ -547,7 +598,9 @@
         set rawInvoices(val) {
           currentInvoices = Array.isArray(val) ? val : [];
         },
-        sourceName: 'Seed Dataset'
+        sourceName: 'Seed Dataset',
+        ledgerFilter: 'dedup', // 'dedup' | 'hs_only' | 'ai_only' | 'all'
+        pairedDepositCount: 0
       };
       window.state = state;
 
@@ -678,8 +731,150 @@
       }
 
       /**
+       * Pure function to deduplicate paired Advance/Deposit (AI) and Cash Sales (HS) invoices.
+       * File 3 lists Advance/Deposit Invoices (AI...) and Cash Sales Invoices (HS...)
+       * side-by-side or paired for the same transaction with identical amounts.
+       *
+       * To prevent double-counting revenue:
+       * - Prioritizes HS (Cash Sale) rows as the primary transaction ledger.
+       * - Filters out AI (Advance Invoice) entries if an HS (Cash Sale) entry exists
+       *   for the same amount/period (matching date, customer, or transaction amount).
+       * - Retains unpaired standalone AI entries when no corresponding HS invoice is present.
+       *
+       * @param {Array<Object>} invoices - Array of normalized invoice objects
+       * @returns {Array<Object>} Filtered/deduplicated invoices without double-counted deposits
+       */
+      function deduplicatePairedInvoices(invoices) {
+        if (!Array.isArray(invoices) || invoices.length === 0) {
+          return [];
+        }
+
+        const hsInvoices = [];
+        const aiInvoices = [];
+        const otherInvoices = [];
+
+        for (const inv of invoices) {
+          if (!inv) continue;
+          const invNo = String(inv.invNo || '').trim().toUpperCase();
+          if (invNo.startsWith('HS')) {
+            hsInvoices.push(inv);
+          } else if (invNo.startsWith('AI')) {
+            aiInvoices.push(inv);
+          } else {
+            otherInvoices.push(inv);
+          }
+        }
+
+        // If no HS invoices exist in the dataset, no pairing exists; keep all invoices
+        if (hsInvoices.length === 0) {
+          return invoices;
+        }
+
+        // Track matched HS invoices by index to guarantee 1-to-1 pairing per identical amount
+        const matchedHsIndices = new Set();
+        const retainedAiInvoices = [];
+
+        for (const aiInv of aiInvoices) {
+          const aiAmt = Math.round((aiInv.grandTotal ?? aiInv.amount ?? 0) * 100) / 100;
+          const aiDate = String(aiInv.date || '').trim();
+          const aiCust = String(aiInv.custCode || aiInv.customerCode || '').trim();
+
+          // 1st Priority: Match by exact amount and exact date
+          let matchIdx = hsInvoices.findIndex((hs, idx) => {
+            if (matchedHsIndices.has(idx)) return false;
+            const hsAmt = Math.round((hs.grandTotal ?? hs.amount ?? 0) * 100) / 100;
+            if (Math.abs(hsAmt - aiAmt) > 0.01) return false;
+            return hs.date && aiDate && String(hs.date).trim() === aiDate;
+          });
+
+          // 2nd Priority: Match by exact amount and matching customer code
+          if (matchIdx === -1 && aiCust) {
+            matchIdx = hsInvoices.findIndex((hs, idx) => {
+              if (matchedHsIndices.has(idx)) return false;
+              const hsAmt = Math.round((hs.grandTotal ?? hs.amount ?? 0) * 100) / 100;
+              if (Math.abs(hsAmt - aiAmt) > 0.01) return false;
+              const hsCust = String(hs.custCode || hs.customerCode || '').trim();
+              return hsCust && hsCust === aiCust;
+            });
+          }
+
+          // 3rd Priority: Match by identical amount within the loaded file/period
+          if (matchIdx === -1) {
+            matchIdx = hsInvoices.findIndex((hs, idx) => {
+              if (matchedHsIndices.has(idx)) return false;
+              const hsAmt = Math.round((hs.grandTotal ?? hs.amount ?? 0) * 100) / 100;
+              return Math.abs(hsAmt - aiAmt) <= 0.01;
+            });
+          }
+
+          if (matchIdx !== -1) {
+            // Paired transaction detected! Prioritize HS Cash Sale and filter out AI Deposit
+            matchedHsIndices.add(matchIdx);
+            aiInv.isPairedDeposit = true;
+            aiInv.pairedWithHs = hsInvoices[matchIdx].invNo;
+
+            // Cross-Row Metadata Merging for File 3 (HS + AI pairs):
+            // In File 3, AI (Advance Invoice) rows contain the customer details and salesperson code,
+            // while HS (Cash Receipt) rows carry the main record.
+            // If an HS row has blank/empty Customer or Salesperson fields, copy them from the corresponding AI row.
+            const targetHs = hsInvoices[matchIdx];
+            const aiCustCode = String(aiInv.customerCode || aiInv.custCode || '').trim();
+            const aiCustName = String(aiInv.customerName || aiInv.custName || '').trim();
+            const aiSp = String(aiInv.salesperson || '').trim();
+
+            const hsCustCode = String(targetHs.customerCode || targetHs.custCode || '').trim();
+            const hsCustName = String(targetHs.customerName || targetHs.custName || '').trim();
+            const hsSp = String(targetHs.salesperson || '').trim();
+
+            if ((!hsCustCode || hsCustCode === '-' || hsCustCode === 'Unassigned') && aiCustCode && aiCustCode !== '-' && aiCustCode !== 'Unassigned') {
+              targetHs.custCode = aiCustCode;
+              targetHs.customerCode = aiCustCode;
+            }
+            if ((!hsCustName || hsCustName === '-' || hsCustName === 'Unassigned' || hsCustName.length <= 1) && aiCustName && aiCustName.length > 1 && aiCustName !== '-' && aiCustName !== 'Unassigned') {
+              targetHs.custName = aiCustName;
+              targetHs.customerName = aiCustName;
+            }
+            if ((!hsSp || hsSp === '-' || hsSp === 'Unassigned') && aiSp && aiSp !== '-' && aiSp !== 'Unassigned') {
+              targetHs.salesperson = aiSp;
+            }
+          } else {
+            // Standalone AI invoice with no corresponding HS cash sale in this period
+            retainedAiInvoices.push(aiInv);
+          }
+        }
+
+        return [...hsInvoices, ...otherInvoices, ...retainedAiInvoices];
+      }
+
+      /**
+       * Retrieve active invoices based on the current ledger filter state:
+       * - 'dedup': Deduplicate paired AI entries against HS cash sales (default)
+       * - 'hs_only': Only HS cash sale invoices
+       * - 'ai_only': Only AI advance/deposit invoices
+       * - 'all': All unfiltered records
+       *
+       * @returns {Array<Object>} Active invoices for dashboard and table
+       */
+      function getActiveInvoices() {
+        const raw = state.rawInvoices || currentInvoices || [];
+        const filter = state.ledgerFilter || 'dedup';
+
+        if (filter === 'hs_only') {
+          return raw.filter(inv => String(inv.invNo || '').trim().toUpperCase().startsWith('HS'));
+        }
+        if (filter === 'ai_only') {
+          return raw.filter(inv => String(inv.invNo || '').trim().toUpperCase().startsWith('AI'));
+        }
+        if (filter === 'all') {
+          return raw;
+        }
+        // Default: deduplicate paired AI against HS
+        return deduplicatePairedInvoices(raw);
+      }
+
+      /**
        * Self-contained verification engine for pure math functions.
-       * Executes 5 explicit hand-calculated test cases and logs PASS/FAIL to DevTools console.
+       * Executes explicit hand-calculated test cases and logs PASS/FAIL to DevTools console.
        *
        * @returns {{ allPassed: boolean, testResults: Array }}
        */
@@ -766,6 +961,65 @@
           actual: `${c5Actual}%`
         });
 
+        // Case 6: Paired AI/HS Invoice Deduplication & Cross-Row Metadata Merging (File 3)
+        // Given paired transactions: HS2603-001 (15,000, empty customer & salesperson) and AI2603-001 (15,000, custCode '06', custName 'Somchai Auto', salesperson 'SP01')
+        // AI2603-001 must be deduplicated out and its customer and salesperson copied to HS2603-001
+        const samplePairedInvoices = [
+          { date: '14/03/2026', invNo: 'HS2603-001', custCode: '', customerCode: '', custName: '', customerName: '', salesperson: '', grandTotal: 15000 },
+          { date: '14/03/2026', invNo: 'AI2603-001', custCode: '06', customerCode: '06', custName: 'Somchai Auto', customerName: 'Somchai Auto', salesperson: 'SP01', grandTotal: 15000 },
+          { date: '14/03/2026', invNo: 'HS2603-002', custCode: '03', customerCode: '03', custName: 'Pisit Motors', customerName: 'Pisit Motors', salesperson: 'SP02', grandTotal: 8000 }
+        ];
+        const dedupedResult = deduplicatePairedInvoices(samplePairedInvoices);
+        const c6ActualCount = dedupedResult.length;
+        const c6ActualTotal = dedupedResult.reduce((sum, inv) => sum + (inv.grandTotal || 0), 0);
+        const hs001 = dedupedResult.find(inv => inv.invNo === 'HS2603-001');
+        const c6ExpectedCount = 2;
+        const c6ExpectedTotal = 23000;
+        const c6Pass = c6ActualCount === c6ExpectedCount && c6ActualTotal === c6ExpectedTotal &&
+                       hs001 &&
+                       (hs001.custCode === '06' || hs001.customerCode === '06') &&
+                       (hs001.custName === 'Somchai Auto' || hs001.customerName === 'Somchai Auto') &&
+                       hs001.salesperson === 'SP01' &&
+                       !dedupedResult.some(inv => inv.invNo === 'AI2603-001');
+        testResults.push({
+          caseNum: 6,
+          name: 'Paired Deposit vs Cash Sales (AI vs HS) Deduplication & Cross-Row Merging',
+          description: 'Filters out paired AI advance invoice when matching HS cash sale exists, merging customer & salesperson metadata into HS row',
+          passed: c6Pass,
+          expected: { count: c6ExpectedCount, total: c6ExpectedTotal, mergedCustCode: '06', mergedCustName: 'Somchai Auto', mergedSalesperson: 'SP01' },
+          actual: { count: c6ActualCount, total: c6ActualTotal, mergedCustCode: hs001 ? (hs001.custCode || hs001.customerCode) : null, mergedCustName: hs001 ? (hs001.custName || hs001.customerName) : null, mergedSalesperson: hs001 ? hs001.salesperson : null }
+        });
+
+        // Case 7: Customer Name Validation (rejects 'Y', 'N', status flags, length <= 1)
+        const nameChecks = {
+          singleCharY: isValidCustomerName('Y'),
+          singleCharN: isValidCustomerName('N'),
+          statusYes: isValidCustomerName('YES'),
+          statusFlag: isValidCustomerName('status'),
+          dateCell: isValidCustomerName('14/03/2569'),
+          numericQuantity: isValidCustomerName('87.01'),
+          invoiceNo: isValidCustomerName('HS2603-001'),
+          validThaiName: isValidCustomerName('บริษัท สยามยนต์ จำกัด'),
+          validEnglishName: isValidCustomerName('Somchai Auto Parts')
+        };
+        const c7Pass = !nameChecks.singleCharY &&
+                       !nameChecks.singleCharN &&
+                       !nameChecks.statusYes &&
+                       !nameChecks.statusFlag &&
+                       !nameChecks.dateCell &&
+                       !nameChecks.numericQuantity &&
+                       !nameChecks.invoiceNo &&
+                       nameChecks.validThaiName &&
+                       nameChecks.validEnglishName;
+        testResults.push({
+          caseNum: 7,
+          name: 'Customer Name Validation (Rejects Single-Char Flag Y/N)',
+          description: "Ensures customerName rejects 'Y', 'N', status flags, and requires valid text with length > 1",
+          passed: c7Pass,
+          expected: 'Reject Y, N, YES, status, date, quantity; Accept Thai and English names (length > 1)',
+          actual: c7Pass ? 'All validation constraints passed' : nameChecks
+        });
+
         // Print explicit PASS/FAIL results for each test case in DevTools Console
         console.group('%c[Milestone M2] Pure Math Verification Checks (runChecks())', 'color: #1d4ed8; font-weight: bold; font-size: 13px;');
         let allPassed = true;
@@ -784,7 +1038,7 @@
         });
 
         if (allPassed) {
-          console.log('%c✓ PASS: All 5 hand-calculated math verification checks passed.', 'color: #16a34a; font-weight: bold; font-size: 12px;');
+          console.log('%c✓ PASS: All 7 hand-calculated math & logic verification checks passed.', 'color: #16a34a; font-weight: bold; font-size: 12px;');
         } else {
           console.error('✗ FAIL: One or more math verification checks failed.');
         }
@@ -793,23 +1047,27 @@
         return { allPassed, testResults };
       }
 
-      // Expose pure math functions and runChecks globally for DevTools inspection
+      // Expose pure math functions, deduplication, and runChecks globally for DevTools inspection
       window.calculateRunRate = calculateRunRate;
       window.calculateForecastRange = calculateForecastRange;
       window.determineTargetPace = determineTargetPace;
       window.mape = mape;
+      window.deduplicatePairedInvoices = deduplicatePairedInvoices;
+      window.getActiveInvoices = getActiveInvoices;
       window.runChecks = runChecks;
 
       /**
        * Check if raw row contains any Thai structural noise marker.
        * Exact match against keywords defined in schema.md and AGENTS.md.
        *
-       * @param {Array} row - Raw row array from SheetJS
+       * @param {Array|Object} row - Raw row from SheetJS
        * @returns {boolean} True if row is structural noise
        */
       function isNoiseRow(row) {
-        if (!row || !Array.isArray(row) || row.length === 0) return true;
-        return row.some(cell => {
+        if (!row) return true;
+        const values = Array.isArray(row) ? row : Object.values(row);
+        if (values.length === 0) return true;
+        return values.some(cell => {
           if (cell === null || cell === undefined) return false;
           const str = String(cell).trim();
           if (!str) return false;
@@ -818,45 +1076,98 @@
       }
 
       /**
-       * Validates whether a value represents a valid invoice identifier.
-       * Supports 'HS' prefix, relaxed prefixes ('INV-', 'SO-', 'IV-', 'RC-', 'CS-', etc.),
-       * and standard numeric or alphanumeric IDs (e.g. 10024, 202409001).
-       * Filters out Thai structural noise keywords and table header labels.
+       * Check if a cell value represents a dashed line or visual separator (e.g., ----------------, ===, ___).
        *
        * @param {any} val
        * @returns {boolean}
        */
-      function isValidInvoiceIdentifier(val) {
+      function isDashedOrSeparatorValue(val) {
         if (val === null || val === undefined) return false;
         const str = String(val).trim();
         if (!str) return false;
+        // Matches 2 or more dashes, en-dashes, em-dashes, underscores, equals, asterisks, or dots
+        if (/^[-—–=_*.]{2,}$/.test(str)) return true;
+        // Matches spaced dashes like "- - - -" or "- - -"
+        if (/^([-—–=_*.]\s*){2,}$/.test(str)) return true;
+        return false;
+      }
 
-        // 1. Filter out known Thai structural noise keywords
-        if (THAI_NOISE_KEYWORDS.some(kw => str.includes(kw))) return false;
-
-        // 2. Filter out typical table header labels (English & Thai)
+      /**
+       * Check if a cell value equals a placeholder header like Column1, Column2, or an explicit table header label like INVOICE NO.
+       *
+       * @param {any} val
+       * @returns {boolean}
+       */
+      function isHeaderPlaceholderValue(val) {
+        if (val === null || val === undefined) return false;
+        const str = String(val).trim();
+        if (!str) return false;
         const lower = str.toLowerCase();
-        const headerTokens = [
-          'invoice', 'invoice no', 'invoice no.', 'inv no', 'inv no.', 'invno', 'inv_no',
-          'เลขที่', 'เลขที่ใบกำกับ', 'เลขที่เอกสาร', 'เอกสาร', 'ลำดับ', 'no', 'no.',
-          'doc no', 'doc no.', 'doc_no', 'document no', 'document number', 'order no',
-          'ใบเสร็จ', 'ใบส่งของ', 'tax invoice', 'bill no'
+
+        // 1. Placeholder column labels: Column1, Column2, Column 1, Col1, Field1, __EMPTY, etc.
+        if (/^(column|col|field|f)[_\s]?\d+$/i.test(str)) return true;
+        if (/^__empty(_\d+)?$/i.test(str)) return true;
+
+        // 2. Explicit table header labels (English & Thai)
+        const HEADER_TOKENS = [
+          'invoice no', 'invoice no.', 'invoiceno', 'inv no', 'inv no.', 'inv_no', 'invoice',
+          'date', 'inv date', 'invoice date', 'doc date', 'docdate', 'document date',
+          'customer code', 'cust code', 'customercode', 'custcode', 'customer id', 'cust id',
+          'customer name', 'cust name', 'customername', 'custname', 'customer',
+          'salesperson', 'sales person', 'sales rep', 'salesrep', 'sales',
+          'grand total', 'grand total (thb)', 'total (thb)', 'total amount', 'total', 'amount', 'net amount', 'price',
+          'วันที่', 'วันที่เอกสาร', 'เลขที่', 'เลขที่ใบกำกับ', 'เลขที่เอกสาร', 'เอกสาร', 'ลำดับ', 'รหัสลูกค้า',
+          'ชื่อลูกค้า', 'พนักงานขาย', 'ผู้ขาย', 'จำนวนเงิน', 'ยอดขาย', 'รวมทั้งสิ้น', 'รายการ', 'หมายเหตุ'
         ];
-        if (headerTokens.includes(lower)) return false;
 
-        // 3. Preferred HS prefix (Thai cash sales report)
-        if (str.toUpperCase().startsWith(INVOICE_PREFIX.toUpperCase())) return true;
+        return HEADER_TOKENS.includes(lower);
+      }
 
-        // 4. Relaxed prefixes: INV-, SO-, IV-, RC-, CS-, TAX-, PS-, BILL-, REC-, PO-, etc.
-        if (/^(inv|so|iv|rc|cs|tax|ps|bill|rec|dn|cn|po|order)[-_ /]?[0-9a-z]/i.test(str)) return true;
+      /**
+       * Filter out header rows, dashed separator lines, blank rows, and Thai structural noise rows.
+       * - Skip rows where column values equal placeholder headers like Column1, Column2, Column3, or INVOICE NO.
+       * - Skip rows containing dashed lines (e.g., ----------------) or blank entries.
+       *
+       * @param {Array|Object} row
+       * @returns {boolean} True if the row should be skipped
+       */
+      function isNoiseOrHeaderRow(row) {
+        if (!row) return true;
 
-        // 5. Standard numeric or alphanumeric IDs (e.g. 10024, 202409001, 24-001, 000123)
-        if (/^[A-Za-z0-9\-_#/]{2,}$/.test(str) && /\d/.test(str)) {
+        const values = Array.isArray(row) ? row : Object.values(row);
+
+        // 1. Skip blank entries (all cells empty, null, or whitespace)
+        const nonEmpty = values.filter(cell => cell !== null && cell !== undefined && String(cell).trim() !== '');
+        if (nonEmpty.length === 0) return true;
+
+        // 2. Skip rows containing dashed lines (e.g., ----------------)
+        if (values.some(cell => isDashedOrSeparatorValue(cell))) {
           return true;
         }
 
-        // 6. Generic alphanumeric IDs with length >= 2
-        if (/^[A-Za-z0-9\-_#/]{2,}$/.test(str)) {
+        // 3. Skip rows where column values equal placeholder headers like Column1, Column2, Column3, or INVOICE NO.
+        if (values.some(cell => {
+          if (cell === null || cell === undefined) return false;
+          const str = String(cell).trim();
+          if (!str) return false;
+          if (/^(column|col|field|f)[_\s]?\d+$/i.test(str)) return true;
+          const lower = str.toLowerCase();
+          if (lower === 'invoice no.' || lower === 'invoice no' || lower === 'invoiceno' || lower === 'inv no' || lower === 'inv no.') return true;
+          if (lower === 'customer code' || lower === 'customer name' || lower === 'grand total' || lower === 'date') return true;
+          if (lower === 'เลขที่ใบกำกับ' || lower === 'รหัสลูกค้า' || lower === 'ชื่อลูกค้า' || lower === 'จำนวนเงิน') return true;
+          return false;
+        })) {
+          return true;
+        }
+
+        // 4. Skip rows that are full table header lines (2 or more header label tokens)
+        const headerMatchCount = values.filter(cell => isHeaderPlaceholderValue(cell)).length;
+        if (headerMatchCount >= 2) {
+          return true;
+        }
+
+        // 5. Skip Thai structural noise rows (รายงานขายเงินสด, รวม, ตัดใบรับมัดจำ, etc.)
+        if (isNoiseRow(row)) {
           return true;
         }
 
@@ -864,25 +1175,34 @@
       }
 
       /**
-       * Check if row matches valid invoice criteria.
-       * Supports relaxed prefix (HS, INV-, SO-, numeric IDs) in column 1 or column 0.
+       * Check if cell value is a date (Date object, Excel serial number, or date string like 14/03/2569 or 01/09/2026).
        *
-       * @param {Array} row - Raw row array
-       * @returns {boolean} True if row contains valid invoice identifier
+       * @param {any} val
+       * @returns {boolean}
        */
-      function isInvoiceRow(row) {
-        if (isNoiseRow(row)) return false;
-        const col1 = String(row[1] || '').trim();
-        const col0 = String(row[0] || '').trim();
-        return isValidInvoiceIdentifier(col1) || isValidInvoiceIdentifier(col0);
+      function isDateCell(val) {
+        if (val === null || val === undefined || val === '') return false;
+        if (val instanceof Date) return true;
+        if (typeof val === 'number') {
+          // Excel date serial numbers typically between 25000 and 70000 (years ~1968 to ~2091)
+          return val >= 25000 && val <= 70000;
+        }
+        const str = String(val).trim();
+        if (!str) return false;
+        if (isDashedOrSeparatorValue(str) || isHeaderPlaceholderValue(str)) return false;
+        // Match DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY (supports CE and Thai Buddhist Era like 14/03/2569)
+        if (/^\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}$/.test(str)) return true;
+        // Match YYYY-MM-DD, YYYY/MM/DD
+        if (/^\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}$/.test(str)) return true;
+        return false;
       }
 
       /**
-       * Convert raw Excel date (serial or text) into standard DD/MM/YYYY string.
-       * Handles Excel serial numbers, JS Date objects, ISO strings, and standard DD/MM/YYYY.
+       * Convert raw Excel date (serial, Date, or text) into standard DD/MM/YYYY string.
+       * Safely handles Thai Buddhist Era years (e.g. 2569 -> 2026) for chronological sorting.
        *
        * @param {any} rawDate
-       * @returns {string} Formatted date string
+       * @returns {string} Formatted date string (DD/MM/YYYY)
        */
       function formatExcelDate(rawDate) {
         if (rawDate === null || rawDate === undefined || rawDate === '') {
@@ -896,7 +1216,7 @@
             if (isNaN(jsDate.getTime())) return '';
             const day = String(jsDate.getUTCDate()).padStart(2, '0');
             const month = String(jsDate.getUTCMonth() + 1).padStart(2, '0');
-            const year = jsDate.getUTCFullYear();
+            let year = jsDate.getUTCFullYear();
             return `${day}/${month}/${year}`;
           } catch (e) {
             return '';
@@ -906,21 +1226,43 @@
           if (isNaN(rawDate.getTime())) return '';
           const day = String(rawDate.getDate()).padStart(2, '0');
           const month = String(rawDate.getMonth() + 1).padStart(2, '0');
-          const year = rawDate.getFullYear();
+          let year = rawDate.getFullYear();
           return `${day}/${month}/${year}`;
         }
         const str = String(rawDate).trim();
-        // If YYYY-MM-DD format, normalize to DD/MM/YYYY
-        const ymdMatch = str.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+
+        // Check YYYY-MM-DD or YYYY/MM/DD
+        const ymdMatch = str.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/);
         if (ymdMatch) {
-          return `${String(ymdMatch[3]).padStart(2, '0')}/${String(ymdMatch[2]).padStart(2, '0')}/${ymdMatch[1]}`;
+          let year = parseInt(ymdMatch[1], 10);
+          if (year > 2400) year -= 543; // Buddhist Era conversion (e.g., 2569 -> 2026)
+          const month = String(ymdMatch[2]).padStart(2, '0');
+          const day = String(ymdMatch[3]).padStart(2, '0');
+          return `${day}/${month}/${year}`;
         }
+
+        // Check DD/MM/YYYY or DD-MM-YYYY
+        const dmyMatch = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
+        if (dmyMatch) {
+          const day = String(dmyMatch[1]).padStart(2, '0');
+          const month = String(dmyMatch[2]).padStart(2, '0');
+          let year = parseInt(dmyMatch[3], 10);
+          if (year < 100) year += 2000;
+          else if (year > 2400) year -= 543; // Buddhist Era conversion (e.g., 2569 -> 2026)
+          return `${day}/${month}/${year}`;
+        }
+
         return str;
       }
 
       /**
-       * Parse numeric currency amount safely.
-       * Handles numbers, comma-delimited strings, and accounting parenthesized negatives e.g. (1,500.00).
+       * Clean numeric totals by removing non-numeric currency formatting before parsing.
+       * Handles:
+       * - Thai Baht currency symbol (฿ / \u0E3F) and words ('THB', 'Baht', 'บาท')
+       * - Currency symbols ($, €, £, ¥)
+       * - Thousands commas (e.g. 12,500.00 -> 12500.00)
+       * - Accounting negative formats: (1,500.00) -> -1500.00, -1,500.00, 1,500.00-
+       * - Safeguard: Date strings, placeholder headers, and dashed lines return 0.
        *
        * @param {any} val
        * @returns {number} Numeric float with 2 decimals
@@ -928,28 +1270,510 @@
       function parseNumericAmount(val) {
         if (typeof val === 'number') return isNaN(val) ? 0 : Math.round(val * 100) / 100;
         if (val === null || val === undefined || val === '') return 0;
-        let cleaned = String(val).replace(/,/g, '').trim();
-        // Support parenthesized negative accounting format e.g. (500.00) -> -500.00
-        if (/^\(.*\)$/.test(cleaned)) {
-          cleaned = '-' + cleaned.slice(1, -1).trim();
+        let str = String(val).trim();
+        if (!str) return 0;
+
+        // Discard headers, dashed separator lines, or date strings
+        if (isDashedOrSeparatorValue(str) || isHeaderPlaceholderValue(str) || isDateCell(val)) {
+          return 0;
         }
-        const num = parseFloat(cleaned);
-        return isNaN(num) ? 0 : Math.round(num * 100) / 100;
+
+        // Detect negative accounting notations: (1,234.56), (฿ 1,234.56), -฿ 1,234.56, 1,234.56-
+        let isNegative = false;
+        if (/^\(.*\)$/.test(str)) {
+          isNegative = true;
+          str = str.slice(1, -1).trim();
+        } else if (str.startsWith('-') || str.endsWith('-')) {
+          isNegative = true;
+          str = str.replace(/-/g, '').trim();
+        }
+
+        // Clean currency symbols, words, commas, and whitespace
+        str = str.replace(/[\u0E3F฿\$€£¥]/g, '')
+                 .replace(/\b(thb|baht|บาท)\b/gi, '')
+                 .replace(/,/g, '')
+                 .replace(/\s+/g, '');
+
+        // Extract numeric float portion
+        const match = str.match(/[-+]?[0-9]*\.?[0-9]+/);
+        if (!match) return 0;
+        let num = parseFloat(match[0]);
+        if (isNaN(num)) return 0;
+        if (isNegative && num > 0) num = -num;
+        return Math.round(num * 100) / 100;
+      }
+
+      /**
+       * Check if an invoice identifier represents a sub-item row (e.g. INV-2, INV-3, INV-4).
+       * Sub-rows represent individual product lines under the parent invoice and must be skipped.
+       *
+       * @param {any} val
+       * @returns {boolean} True if starts with INV-
+       */
+      function isSubItemInvoiceNumber(val) {
+        if (val === null || val === undefined) return false;
+        const str = String(val).trim().toUpperCase();
+        return str.startsWith('INV-');
+      }
+
+      /**
+       * Check if a value represents a line-item quantity or decimal number (e.g. 1.00, 87.01, 10.50).
+       * Prevents line-item quantities from polluting CUSTOMER CODE or invoice identifiers.
+       *
+       * @param {any} val
+       * @returns {boolean} True if decimal quantity
+       */
+      function isLineItemQuantityOrNumericDecimal(val) {
+        if (val === null || val === undefined || val === '') return false;
+        if (typeof val === 'number') {
+          return !Number.isInteger(val);
+        }
+        const str = String(val).trim();
+        if (!str) return false;
+        // Decimal numbers with decimal point like 1.00, 87.01, 1,234.50
+        if (/^[-+]?[0-9]{1,3}(,[0-9]{3})*\.[0-9]+$/.test(str) || /^[-+]?[0-9]+\.[0-9]+$/.test(str)) {
+          return true;
+        }
+        return false;
+      }
+
+      /**
+       * Ensure CUSTOMER CODE only receives actual customer codes (e.g., 06, 03, C-0104, AR-01)
+       * and ignores line-item quantities (1.00, 87.01), dates, separators, and invoice numbers.
+       *
+       * @param {any} val
+       * @returns {boolean} True if valid customer code
+       */
+      function isValidCustomerCode(val) {
+        if (val === null || val === undefined) return false;
+        const str = String(val).trim();
+        if (!str) return false;
+
+        // Discard dashed separators, headers, or dates
+        if (isDashedOrSeparatorValue(str) || isHeaderPlaceholderValue(str) || isDateCell(str)) {
+          return false;
+        }
+
+        // Reject single-character status flags like 'Y' or 'N'
+        if (/^(y|n|t|f)$/i.test(str)) {
+          return false;
+        }
+
+        // Ignore line-item quantities (e.g. 1.00, 87.01)
+        if (isLineItemQuantityOrNumericDecimal(val) || isLineItemQuantityOrNumericDecimal(str)) {
+          return false;
+        }
+
+        // Customer codes never contain a decimal point
+        if (str.includes('.')) {
+          return false;
+        }
+
+        // Ignore sub-item invoice numbers (INV-2, INV-3)
+        if (isSubItemInvoiceNumber(str)) {
+          return false;
+        }
+
+        // Thai noise keywords
+        if (THAI_NOISE_KEYWORDS.some(kw => str.includes(kw))) {
+          return false;
+        }
+
+        // Length limit
+        if (str.length > 20) return false;
+
+        // Must contain alphanumeric or Thai characters
+        if (!/[0-9a-zA-Z\u0E00-\u0E7F]/.test(str)) return false;
+
+        return true;
+      }
+
+      /**
+       * Pure validator for Customer Name:
+       * - Rejects single-character values (e.g. 'Y', 'N', 'T', 'F')
+       * - Rejects status flags and booleans ('Y', 'N', 'YES', 'NO', 'TRUE', 'FALSE', 'CANCEL', 'VOID', 'STATUS', etc.)
+       * - Rejects date strings, numeric quantities, and invoice numbers
+       * - Accepts valid Thai or English customer names with string length > 1
+       *
+       * @param {any} val
+       * @returns {boolean}
+       */
+      function isValidCustomerName(val) {
+        if (val === null || val === undefined) return false;
+        const str = String(val).trim();
+
+        // Ensure customerName only accepts string values with length > 1
+        if (str.length <= 1) return false;
+
+        // Reject status flags and boolean indicators
+        if (/^(y|n|yes|no|t|f|true|false|void|cancel|status|active|ok|pass|fail|null|undefined|nan)$/i.test(str)) {
+          return false;
+        }
+
+        // Reject dashed lines or table separators
+        if (isDashedOrSeparatorValue(str) || isHeaderPlaceholderValue(str)) {
+          return false;
+        }
+
+        // Reject date formats
+        if (isDateCell(str)) {
+          return false;
+        }
+
+        // Reject line-item quantities or numeric decimal values (e.g. 1.00, 87.01)
+        if (isLineItemQuantityOrNumericDecimal(str)) {
+          return false;
+        }
+
+        // Reject invoice sub-items (e.g. INV-2)
+        if (isSubItemInvoiceNumber(str)) {
+          return false;
+        }
+
+        // Reject invoice number formats (e.g. HS2403-001, AI2403-001, IV2403-001)
+        if (/^(hs|iv|ai|so|rc|cs|tax|ps|bill|rec|dn|cn|po|inv)[-_ /]*\d/i.test(str)) {
+          return false;
+        }
+
+        return true;
+      }
+      window.isValidCustomerName = isValidCustomerName;
+
+      /**
+       * Validates whether a value represents a valid primary invoice identifier.
+       * Main invoices have valid full invoice numbers (e.g., starting with IV, HS, AI, etc.).
+       * Sub-rows like INV-2, INV-3, INV-4 represent individual product lines under the parent invoice
+       * and are explicitly rejected.
+       *
+       * @param {any} val
+       * @returns {boolean}
+       */
+      function isValidInvoiceIdentifier(val) {
+        if (val === null || val === undefined) return false;
+        const str = String(val).trim();
+        if (!str) return false;
+
+        // 1. Filter out separator lines, dates, and placeholder headers
+        if (isDashedOrSeparatorValue(str)) return false;
+        if (isDateCell(str)) return false;
+        if (isHeaderPlaceholderValue(str)) return false;
+
+        // 2. Filter out known Thai structural noise keywords
+        if (THAI_NOISE_KEYWORDS.some(kw => str.includes(kw))) return false;
+
+        // 3. Explicitly filter out sub-item rows starting with INV- (e.g., INV-2, INV-3, INV-4)
+        if (isSubItemInvoiceNumber(str)) return false;
+
+        // 4. Ignore line-item quantities (e.g. 1.00, 87.01)
+        if (isLineItemQuantityOrNumericDecimal(str)) return false;
+
+        // 5. Preferred Thai & standard ERP primary invoice prefixes:
+        // HS (Cash Sales), IV (Invoice), AI (Auto-Invoice), SO (Sales Order),
+        // RC (Receipt), CS (Cash Sale), TAX (Tax Invoice), PS (Pos Sale),
+        // BILL (Billing), REC (Receipt), DN (Debit Note), CN (Credit Note), PO (Purchase Order)
+        if (/^(hs|iv|ai|so|rc|cs|tax|ps|bill|rec|dn|cn|po|order)[-_ /]*\d/i.test(str)) {
+          return true;
+        }
+
+        // 6. Standard alphanumeric IDs with digits (e.g. 10024, 202409001, 24-001, 000123)
+        // Must NOT start with INV-
+        if (/^[A-Za-z0-9\-_#/]{2,}$/.test(str) && /\d/.test(str) && !isSubItemInvoiceNumber(str)) {
+          return true;
+        }
+
+        // 7. Generic alphanumeric IDs with length >= 2 (not purely alphabetic common words)
+        if (/^[A-Za-z0-9\-_#/]{2,}$/.test(str) && !/^[A-Za-z]{3,}$/.test(str) && !isSubItemInvoiceNumber(str)) {
+          return true;
+        }
+
+        return false;
+      }
+
+      /**
+       * Check if an invoice row is a top-level parent invoice:
+       * - Must have a valid, non-blank Date.
+       * - Must have a valid primary invoice number.
+       * - Sub-rows like INV-2, INV-3, INV-4 represent individual product lines under
+       *   the parent invoice and are skipped (Invoice Number starts with INV- OR Date is blank).
+       * - Prevents duplicate invoice calculations so Grand Total is calculated accurately without duplicating line items.
+       *
+       * @param {Object} inv
+       * @returns {boolean} True if row is top-level parent invoice
+       */
+      function isTopLevelParentInvoice(inv) {
+        if (!inv || typeof inv !== 'object') return false;
+
+        // Skip rows where the Date field is blank or missing
+        const dateStr = String(inv.date || '').trim();
+        if (!dateStr || !isDateCell(dateStr)) {
+          return false;
+        }
+
+        // Skip rows where the Invoice Number is missing or starts with INV-
+        const invNo = String(inv.invNo || '').trim();
+        if (!invNo || isSubItemInvoiceNumber(invNo)) {
+          return false;
+        }
+
+        // Must be a valid primary invoice identifier
+        if (!isValidInvoiceIdentifier(invNo)) {
+          return false;
+        }
+
+        return true;
+      }
+
+      /**
+       * Helper to retrieve object value by multiple case-insensitive key name candidates.
+       *
+       * @param {Object} obj
+       * @param {Array<string>} candidateKeys
+       * @returns {any}
+       */
+      function getObjectValueByKeys(obj, candidateKeys) {
+        if (!obj || typeof obj !== 'object') return null;
+        const objKeys = Object.keys(obj);
+        for (const cKey of candidateKeys) {
+          const cNormalized = cKey.toLowerCase().replace(/[^a-z0-9\u0E00-\u0E7F]/g, '');
+          for (const oKey of objKeys) {
+            const oNormalized = oKey.toLowerCase().replace(/[^a-z0-9\u0E00-\u0E7F]/g, '');
+            if (oNormalized === cNormalized) {
+              const val = obj[oKey];
+              if (val !== undefined && val !== null && String(val).trim() !== '') {
+                return val;
+              }
+            }
+          }
+        }
+        return null;
+      }
+
+      /**
+       * Intelligently aligns raw cell values from an Excel row into the standardized schema:
+       * DATE -> date
+       * INVOICE NO. -> invNo
+       * CUSTOMER CODE -> customerCode & custCode
+       * CUSTOMER NAME -> customerName & custName
+       * SALESPERSON -> salesperson
+       * GRAND TOTAL -> grandTotal
+       *
+       * Gracefully handles generic column headers (Column1, Column2, etc.) and guarantees
+       * that date strings (e.g. 14/03/2569) never end up inside customer code or name fields.
+       *
+       * @param {Array} values
+       * @returns {Object}
+       */
+      function alignRowValues(values) {
+        if (!Array.isArray(values)) {
+          return { date: '', invNo: '', custCode: '', customerCode: '', custName: '', customerName: '', salesperson: '', grandTotal: 0 };
+        }
+
+        // Extract clean non-separator, non-header cells
+        const cleanCells = [];
+        for (let i = 0; i < values.length; i++) {
+          const v = values[i];
+          if (v === null || v === undefined) continue;
+          const str = String(v).trim();
+          if (!str) continue;
+          if (isDashedOrSeparatorValue(str)) continue;
+          if (isHeaderPlaceholderValue(str)) continue;
+          cleanCells.push({ originalIndex: i, value: v, str });
+        }
+
+        let dateVal = '';
+        let invVal = '';
+        let custCodeVal = '';
+        let custNameVal = '';
+        let spVal = '';
+        let totalVal = 0;
+
+        const used = new Set();
+
+        // 1. Identify Date (Crucial: 14/03/2569 is assigned to date and reserved so it never leaks)
+        for (let i = 0; i < cleanCells.length; i++) {
+          const cell = cleanCells[i];
+          if (isDateCell(cell.value)) {
+            dateVal = formatExcelDate(cell.value);
+            used.add(i);
+            break;
+          }
+        }
+
+        // 2. Identify Grand Total: non-date numeric amount (scan from right-to-left)
+        for (let i = cleanCells.length - 1; i >= 0; i--) {
+          if (used.has(i)) continue;
+          const cell = cleanCells[i];
+          if (isDateCell(cell.value)) continue;
+          const amt = parseNumericAmount(cell.value);
+          if (amt !== 0 || (typeof cell.value === 'number' && !isNaN(cell.value))) {
+            totalVal = amt;
+            used.add(i);
+            break;
+          }
+        }
+
+        // 3. Identify Invoice Number: valid primary identifier (rejects sub-items INV- and quantities)
+        // CRITICAL FOR PAIRED TRANSACTIONS: Prioritize HS prefix over AI prefix if both exist in the row
+        let preferredIndex = -1;
+        for (let i = 0; i < cleanCells.length; i++) {
+          if (used.has(i)) continue;
+          const cell = cleanCells[i];
+          if (isDateCell(cell.value)) continue;
+          if (isLineItemQuantityOrNumericDecimal(cell.value) || isLineItemQuantityOrNumericDecimal(cell.str)) continue;
+          if (isSubItemInvoiceNumber(cell.str)) continue;
+          if (/^hs[-_ /]?[0-9a-z]/i.test(cell.str)) {
+            preferredIndex = i;
+            break;
+          }
+        }
+
+        if (preferredIndex !== -1) {
+          invVal = cleanCells[preferredIndex].str;
+          used.add(preferredIndex);
+        } else {
+          for (let i = 0; i < cleanCells.length; i++) {
+            if (used.has(i)) continue;
+            const cell = cleanCells[i];
+            if (isDateCell(cell.value)) continue;
+            if (isLineItemQuantityOrNumericDecimal(cell.value) || isLineItemQuantityOrNumericDecimal(cell.str)) continue;
+            if (isSubItemInvoiceNumber(cell.str)) continue;
+            if (isValidInvoiceIdentifier(cell.str)) {
+              invVal = cell.str;
+              used.add(i);
+              break;
+            }
+          }
+        }
+
+        // If an AI deposit invoice number also exists in the same row, consume it so it never leaks into custCode or custName
+        for (let i = 0; i < cleanCells.length; i++) {
+          if (used.has(i)) continue;
+          const cell = cleanCells[i];
+          if (/^ai[-_ /]?[0-9a-z]/i.test(cell.str)) {
+            used.add(i);
+            break;
+          }
+        }
+
+        // 4. Identify Customer Name: contains Thai script or multiple words (length > 4) and passes isValidCustomerName
+        for (let i = 0; i < cleanCells.length; i++) {
+          if (used.has(i)) continue;
+          const cell = cleanCells[i];
+          if (isDateCell(cell.value)) continue;
+          if (isLineItemQuantityOrNumericDecimal(cell.value) || isLineItemQuantityOrNumericDecimal(cell.str)) continue;
+          if (isSubItemInvoiceNumber(cell.str)) continue;
+          if (isValidCustomerName(cell.str) && (/[\u0E00-\u0E7F]/.test(cell.str) || (cell.str.length > 4 && /\s/.test(cell.str)))) {
+            custNameVal = cell.str;
+            used.add(i);
+            break;
+          }
+        }
+
+        // 5. Identify Customer Code: actual customer code (e.g. 06, 03, C-0104), ignoring line-item quantities (1.00, 87.01) and flags
+        for (let i = 0; i < cleanCells.length; i++) {
+          if (used.has(i)) continue;
+          const cell = cleanCells[i];
+          if (isDateCell(cell.value)) continue;
+          if (isLineItemQuantityOrNumericDecimal(cell.value) || isLineItemQuantityOrNumericDecimal(cell.str)) continue;
+          if (isSubItemInvoiceNumber(cell.str)) continue;
+          if (isValidCustomerCode(cell.str)) {
+            custCodeVal = cell.str;
+            used.add(i);
+            break;
+          }
+        }
+
+        // 6. Identify Salesperson or fill remaining unassigned fields (strictly ignore single-char flags 'Y', 'N')
+        for (let i = 0; i < cleanCells.length; i++) {
+          if (used.has(i)) continue;
+          const cell = cleanCells[i];
+          if (isDateCell(cell.value)) continue;
+          if (isLineItemQuantityOrNumericDecimal(cell.value) || isLineItemQuantityOrNumericDecimal(cell.str)) continue;
+          if (isSubItemInvoiceNumber(cell.str)) continue;
+          if (/^(y|n|yes|no)$/i.test(cell.str) || cell.str.length <= 1) continue;
+
+          if (!spVal && cell.str.length <= 8) {
+            spVal = cell.str;
+          } else if (!custCodeVal && isValidCustomerCode(cell.str)) {
+            custCodeVal = cell.str;
+          } else if (!custNameVal && isValidCustomerName(cell.str)) {
+            custNameVal = cell.str;
+          }
+          used.add(i);
+        }
+
+        // Safeguard: Ensure date strings (e.g. 14/03/2569) NEVER end up inside customer code or name fields!
+        if (isDateCell(custCodeVal)) {
+          if (!dateVal) dateVal = formatExcelDate(custCodeVal);
+          custCodeVal = '';
+        }
+        if (isDateCell(custNameVal)) {
+          if (!dateVal) dateVal = formatExcelDate(custNameVal);
+          custNameVal = '';
+        }
+
+        // Ensure customer code only receives actual customer codes and ignores line-item quantities
+        if (!isValidCustomerCode(custCodeVal)) {
+          custCodeVal = '';
+        }
+
+        // Ensure customer name rejects single-character flags (e.g. 'Y') and invalid text
+        if (!isValidCustomerName(custNameVal)) {
+          custNameVal = '';
+        }
+
+        // Fallbacks for Customer Name, Customer Code, and Salesperson
+        if (!custNameVal || custNameVal.length <= 1) {
+          if (custCodeVal && isValidCustomerCode(custCodeVal)) {
+            custNameVal = custCodeVal;
+          } else {
+            custNameVal = 'Unassigned';
+          }
+        }
+        if (!spVal || spVal === '-' || isDashedOrSeparatorValue(spVal)) {
+          spVal = 'Unassigned';
+        }
+        if (!custCodeVal || custCodeVal === '-' || isDashedOrSeparatorValue(custCodeVal)) {
+          custCodeVal = 'Unassigned';
+        }
+
+        return {
+          date: dateVal,
+          invNo: invVal,
+          custCode: custCodeVal,
+          customerCode: custCodeVal,
+          custName: custNameVal,
+          customerName: custNameVal,
+          salesperson: spVal,
+          grandTotal: totalVal
+        };
       }
 
       /**
        * Construct a normalized Invoice object with aliases for maximum compatibility.
-       * Supports standard properties and aliases for Date, date, Invoice, invNo, Amount, amount, Total, total, sales.
+       * Supports standard properties: date, invNo, custCode, customerCode, custName, customerName, salesperson, grandTotal.
        *
        * @param {Object} param0
        * @returns {Object} Clean normalized Invoice
        */
-      function createNormalizedInvoice({ date, invNo, custCode, custName, salesperson, grandTotal }) {
+      function createNormalizedInvoice({ date, invNo, custCode, customerCode, custName, customerName, salesperson, grandTotal }) {
+        let cCode = String(customerCode !== undefined && customerCode !== null ? customerCode : (custCode || '')).trim();
+        // Ensure CUSTOMER CODE only receives actual customer codes and ignores line-item quantities (1.00, 87.01)
+        if (isLineItemQuantityOrNumericDecimal(cCode) || !isValidCustomerCode(cCode)) {
+          cCode = '';
+        }
+        let cName = String(customerName !== undefined && customerName !== null ? customerName : (custName || '')).trim();
+        // Ensure CUSTOMER NAME only accepts valid text with length > 1 and rejects single-char flags (like 'Y')
+        if (!isValidCustomerName(cName)) {
+          cName = '';
+        }
         const inv = {
           date: date || '',
           invNo: invNo || '',
-          custCode: custCode || '',
-          custName: custName || '',
+          custCode: cCode,
+          customerCode: cCode,
+          custName: cName,
+          customerName: cName,
           salesperson: salesperson || '',
           grandTotal: typeof grandTotal === 'number' && !isNaN(grandTotal) ? grandTotal : 0,
 
@@ -981,91 +1805,160 @@
       }
 
       /**
-       * Check if an object contains any Thai structural noise marker in its values.
-       *
-       * @param {Object} obj
-       * @returns {boolean}
-       */
-      function isNoiseRowObject(obj) {
-        if (!obj || typeof obj !== 'object') return true;
-        const values = Object.values(obj);
-        return values.some(val => {
-          if (val === null || val === undefined) return false;
-          const str = String(val).trim();
-          if (!str) return false;
-          return THAI_NOISE_KEYWORDS.some(keyword => str.includes(keyword));
-        });
-      }
-
-      /**
        * Normalize an arbitrary JSON object row into a standard Invoice object.
-       * Maps "Date", "date", "Invoice", "Amount", "amount", "Total", "sales" to standard properties.
+       * Accurately maps:
+       * - DATE -> date
+       * - INVOICE NO. -> invNo
+       * - CUSTOMER CODE -> customerCode & custCode
+       * - CUSTOMER NAME -> customerName & custName
+       * - SALESPERSON -> salesperson
+       * - GRAND TOTAL -> grandTotal (cleaned from currency formatting)
+       *
+       * Fallback: If columns are named Column1, Column2, etc., gracefully aligns fields
+       * and ensures date strings (14/03/2569) don't end up inside customer code or name fields.
        *
        * @param {Object} obj
        * @returns {Object} Normalized Invoice object
        */
       function normalizeObjectRow(obj) {
         if (!obj || typeof obj !== 'object') {
-          return createNormalizedInvoice({ date: '', invNo: '', custCode: '', custName: '', salesperson: '', grandTotal: 0 });
+          return createNormalizedInvoice({ date: '', invNo: '', custCode: '', customerCode: '', custName: '', customerName: '', salesperson: '', grandTotal: 0 });
         }
 
-        // Find date property
-        let rawDate = '';
-        for (const key of Object.keys(obj)) {
-          const k = key.trim().toLowerCase();
-          if (k === 'date' || k === 'วันที่' || k === 'invdate' || k === 'invoicedate') {
-            rawDate = obj[key];
+        const keys = Object.keys(obj);
+        // Check if keys are placeholder column headers (Column1, Column2, __EMPTY, etc.)
+        const isGenericKeys = keys.length > 0 && keys.every(k => isHeaderPlaceholderValue(k));
+
+        if (isGenericKeys) {
+          const aligned = alignRowValues(Object.values(obj));
+          return createNormalizedInvoice(aligned);
+        }
+
+        // Map recognized column headers
+        let rawDate = getObjectValueByKeys(obj, [
+          'date', 'inv date', 'invoicedate', 'invdate', 'doc date', 'docdate', 'document date', 'วันที่', 'วันที่เอกสาร'
+        ]);
+
+        let rawInv = getObjectValueByKeys(obj, [
+          'invoice no', 'invoice no.', 'invoiceno', 'inv no', 'inv no.', 'inv_no', 'invoice',
+          'doc no', 'doc no.', 'doc_no', 'document no', 'document number', 'order no',
+          'เลขที่', 'เลขที่ใบกำกับ', 'เลขที่เอกสาร'
+        ]);
+
+        // Prioritize HS Cash Sale invoice if an HS invoice number is present anywhere in obj (e.g. paired export)
+        for (const k of keys) {
+          const v = String(obj[k] || '').trim();
+          if (/^hs[-_ /]?[0-9a-z]/i.test(v) && isValidInvoiceIdentifier(v)) {
+            rawInv = v;
             break;
           }
         }
 
-        // Find invoice property
-        let rawInv = '';
-        for (const key of Object.keys(obj)) {
-          const k = key.trim().toLowerCase();
-          if (k === 'invoice' || k === 'invno' || k === 'invoice no' || k === 'invoice no.' || k === 'invoiceno' || k === 'inv_no' || k === 'เลขที่' || k === 'เลขที่ใบกำกับ') {
-            rawInv = obj[key];
-            break;
+        let rawCustCode = getObjectValueByKeys(obj, [
+          'customer code', 'customer code.', 'customercode', 'cust code', 'cust code.', 'custcode',
+          'customer id', 'cust id', 'รหัสลูกค้า', 'รหัส'
+        ]);
+
+        let rawCustName = getObjectValueByKeys(obj, [
+          'customer name', 'customer name.', 'customername', 'cust name', 'cust name.', 'custname',
+          'customer', 'ชื่อลูกค้า', 'ชื่อ'
+        ]);
+
+        // Validate rawCustName: Reject single-char status flags (like 'Y' or 'N')
+        if (rawCustName && !isValidCustomerName(rawCustName)) {
+          rawCustName = '';
+        }
+
+        // If customer name was not found or was polluted by a status flag ('Y'), search all properties
+        if (!rawCustName) {
+          for (const k of keys) {
+            const kNorm = k.toLowerCase().replace(/[^a-z0-9\u0E00-\u0E7F]/g, '');
+            if (/^(status|flag|cancel|void|yn|y|n|active|posted|ยกเลิก|สถานะ|ผ่าน)$/i.test(kNorm)) continue;
+            if (/^(date|inv|invoice|amount|total|grand|price|sales|rep|code|id|no|รหัส|วันที่|ยอด|พนักงาน)/i.test(kNorm)) continue;
+
+            const candidateVal = obj[k];
+            if (candidateVal !== null && candidateVal !== undefined) {
+              const cStr = String(candidateVal).trim();
+              if (isValidCustomerName(cStr) && !isValidCustomerCode(cStr) && cStr !== rawInv && cStr !== rawCustCode) {
+                rawCustName = cStr;
+                break;
+              }
+            }
           }
         }
 
-        // Find customer code
-        let rawCustCode = '';
-        for (const key of Object.keys(obj)) {
-          const k = key.trim().toLowerCase();
-          if (k === 'custcode' || k === 'customer code' || k === 'customercode' || k === 'รหัสลูกค้า' || k === 'code') {
-            rawCustCode = obj[key];
-            break;
+        let rawSalesperson = getObjectValueByKeys(obj, [
+          'salesperson', 'sales person', 'salesman', 'sales rep', 'salesrep', 'sales',
+          'พนักงานขาย', 'ผู้ขาย', 'rep', 'seller', 'emp no', 'emp no.', 'empno', 'employee',
+          'column5', 'col5'
+        ]);
+
+        // Fallback for Salesperson if empty, dash, or placeholder: check alternate 'code' column
+        if (!rawSalesperson || String(rawSalesperson).trim() === '-' || isDashedOrSeparatorValue(String(rawSalesperson).trim())) {
+          const altCode = getObjectValueByKeys(obj, ['code', 'sale code', 'salecode', 'sale id']);
+          if (altCode && altCode !== rawCustCode && !isDashedOrSeparatorValue(String(altCode).trim())) {
+            rawSalesperson = altCode;
+          }
+        }
+        if (!rawSalesperson || String(rawSalesperson).trim() === '-' || isDashedOrSeparatorValue(String(rawSalesperson).trim())) {
+          rawSalesperson = 'Unassigned';
+        }
+
+        // Fallback for Customer Name: if missing or single-char flag (<= 1 char), fallback to Customer Code
+        if (!rawCustName || rawCustName.length <= 1) {
+          if (rawCustCode && isValidCustomerCode(rawCustCode)) {
+            rawCustName = rawCustCode;
+          } else {
+            rawCustName = 'Unassigned';
           }
         }
 
-        // Find customer name
-        let rawCustName = '';
-        for (const key of Object.keys(obj)) {
-          const k = key.trim().toLowerCase();
-          if (k === 'custname' || k === 'customer name' || k === 'customername' || k === 'customer' || k === 'ชื่อลูกค้า' || k === 'name') {
-            rawCustName = obj[key];
-            break;
-          }
+        let rawAmount = getObjectValueByKeys(obj, [
+          'grand total', 'grand total (thb)', 'total (thb)', 'total amount', 'total', 'amount',
+          'net amount', 'price', 'ยอดขาย', 'จำนวนเงิน', 'รวมทั้งสิ้น', 'grandtotal', 'sales'
+        ]);
+
+        // Safeguard: Ensure date strings (e.g. 14/03/2569) don't end up inside customer code or name fields!
+        if (isDateCell(rawCustCode)) {
+          if (!rawDate) rawDate = rawCustCode;
+          rawCustCode = '';
+        }
+        if (isDateCell(rawCustName)) {
+          if (!rawDate) rawDate = rawCustName;
+          rawCustName = '';
+        }
+        if (isDateCell(rawInv)) {
+          if (!rawDate) rawDate = rawInv;
+          rawInv = '';
         }
 
-        // Find salesperson
-        let rawSalesperson = '';
-        for (const key of Object.keys(obj)) {
-          const k = key.trim().toLowerCase();
-          if (k === 'salesperson' || k === 'sales' || k === 'sales_rep' || k === 'salesrep' || k === 'พนักงานขาย') {
-            rawSalesperson = obj[key];
-            break;
-          }
+        // If customer code has Thai characters or spaces, and customer name is empty, swap them
+        if (rawCustCode && (/[\u0E00-\u0E7F]/.test(rawCustCode) || rawCustCode.includes(' ')) && !rawCustName) {
+          rawCustName = rawCustCode;
+          rawCustCode = '';
         }
 
-        // Find amount: maps "Amount", "amount", "Total", "total", "sales", "Sales", "grandTotal", "ยอดขาย", "จำนวนเงิน"
-        let rawAmount = 0;
-        for (const key of Object.keys(obj)) {
-          const k = key.trim().toLowerCase();
-          if (k === 'amount' || k === 'total' || k === 'sales' || k === 'grandtotal' || k === 'grand total' || k === 'ยอดขาย' || k === 'จำนวนเงิน' || k === 'price') {
-            rawAmount = obj[key];
-            break;
+        // If invoice number is missing or misplaced in customer code
+        if (!rawInv && isValidInvoiceIdentifier(rawCustCode)) {
+          rawInv = rawCustCode;
+          rawCustCode = '';
+        }
+
+        // Verify Customer Code: ensure CUSTOMER CODE only receives actual customer codes (e.g. 06, 03) and ignores quantities (1.00, 87.01)
+        if (rawCustCode && (!isValidCustomerCode(rawCustCode) || isLineItemQuantityOrNumericDecimal(rawCustCode))) {
+          rawCustCode = '';
+        }
+
+        // If amount wasn't found by explicit key, scan all properties for numeric amount
+        if (rawAmount === null || rawAmount === undefined || parseNumericAmount(rawAmount) === 0) {
+          for (const k of keys) {
+            const val = obj[k];
+            if (isDateCell(val)) continue;
+            const amt = parseNumericAmount(val);
+            if (amt !== 0) {
+              rawAmount = amt;
+              break;
+            }
           }
         }
 
@@ -1073,7 +1966,9 @@
           date: formatExcelDate(rawDate),
           invNo: String(rawInv || '').trim(),
           custCode: String(rawCustCode || '').trim(),
+          customerCode: String(rawCustCode || '').trim(),
           custName: String(rawCustName || '').trim(),
+          customerName: String(rawCustName || '').trim(),
           salesperson: String(rawSalesperson || '').trim(),
           grandTotal: parseNumericAmount(rawAmount)
         });
@@ -1081,47 +1976,65 @@
 
       /**
        * Normalize raw row into clean Invoice object (schema.md §3.1).
-       * Gracefully handles missing columns, variable row lengths, and relaxed invoice IDs.
+       * Handles 2D arrays, verifies column alignment, and prevents dates from leaking into names/codes.
        *
        * @param {Array} row
        * @returns {Object} Clean normalized Invoice
        */
       function normalizeInvoiceRow(row) {
         if (!Array.isArray(row)) {
-          return createNormalizedInvoice({ date: '', invNo: '', custCode: '', custName: '', salesperson: '', grandTotal: 0 });
+          return createNormalizedInvoice({ date: '', invNo: '', custCode: '', customerCode: '', custName: '', customerName: '', salesperson: '', grandTotal: 0 });
         }
+
+        // Use intelligent alignment to map DATE, INVOICE NO, CUSTOMER CODE, CUSTOMER NAME, SALESPERSON, GRAND TOTAL
+        const aligned = alignRowValues(row);
+        if (aligned.invNo || aligned.grandTotal !== 0 || aligned.date) {
+          return createNormalizedInvoice(aligned);
+        }
+
+        // Fallback to indexed positions
         let invNo = String(row[1] || '').trim();
         let dateVal = row[0];
         let custCode = row[2];
         let custName = row[3];
         let salesperson = row[4];
 
-        // If col 1 is not valid invoice ID but col 0 is, swap
         if (!isValidInvoiceIdentifier(invNo) && isValidInvoiceIdentifier(row[0])) {
           invNo = String(row[0] || '').trim();
           dateVal = row[1];
         }
 
-        // Determine grand total
         let amt = 0;
-        if (row.length > 7 && row[7] !== '' && row[7] !== null && row[7] !== undefined) {
-          amt = parseNumericAmount(row[7]);
-        }
-        if (amt === 0) {
-          for (let c = row.length - 1; c >= 2; c--) {
-            const cellAmt = parseNumericAmount(row[c]);
-            if (cellAmt !== 0) {
-              amt = cellAmt;
-              break;
-            }
+        for (let c = row.length - 1; c >= 2; c--) {
+          const cellAmt = parseNumericAmount(row[c]);
+          if (cellAmt !== 0) {
+            amt = cellAmt;
+            break;
           }
+        }
+
+        // Guard against date ending up in customer code or name
+        if (isDateCell(custCode)) {
+          if (!dateVal) dateVal = custCode;
+          custCode = '';
+        }
+        if (isDateCell(custName)) {
+          if (!dateVal) dateVal = custName;
+          custName = '';
+        }
+
+        // Ensure customer code is valid
+        if (!isValidCustomerCode(custCode)) {
+          custCode = '';
         }
 
         return createNormalizedInvoice({
           date: formatExcelDate(dateVal),
           invNo: invNo,
           custCode: String(custCode || '').trim(),
+          customerCode: String(custCode || '').trim(),
           custName: String(custName || '').trim(),
+          customerName: String(custName || '').trim(),
           salesperson: String(salesperson || '').trim(),
           grandTotal: amt
         });
@@ -1129,9 +2042,10 @@
 
       /**
        * Parse 2D raw array from SheetJS into normalized Invoice array:
-       * 1. Strips structural Thai noise rows.
-       * 2. Matches valid invoice identifiers (relaxed HS, INV-, SO-, numeric, alphanumeric IDs).
-       * 3. Normalizes to Invoice schema.
+       * 1. Filters out header & separator rows (Column1, INVOICE NO., dashed lines ----------------, blank entries).
+       * 2. Normalizes rows with guaranteed column alignment.
+       * 3. Prevents duplicate invoice calculations: only adds top-level parent invoices
+       *    (rows containing a valid date and primary invoice number).
        *
        * @param {Array<Array>} rawRows
        * @returns {Array<Object>} Clean normalized Invoice objects
@@ -1142,23 +2056,22 @@
 
         for (let i = 0; i < rawRows.length; i++) {
           const row = rawRows[i];
-          if (!row || !Array.isArray(row) || row.length < 2) continue;
+          if (!row || !Array.isArray(row) || row.length === 0) continue;
 
-          // Step 1: Strip structural / noise rows
-          if (isNoiseRow(row)) {
+          // Filter Out Header & Separator Rows:
+          // Skip rows where column values equal placeholder headers like Column1, Column2, Column3, or INVOICE NO.
+          // Skip rows containing dashed lines (e.g., ----------------) or blank entries.
+          if (isNoiseOrHeaderRow(row)) {
             continue;
           }
 
-          // Step 2: Check invoice identifier in col 1 or col 0
-          const col1 = String(row[1] || '').trim();
-          const col0 = String(row[0] || '').trim();
-          if (!isValidInvoiceIdentifier(col1) && !isValidInvoiceIdentifier(col0)) {
-            continue;
-          }
-
-          // Step 3: Normalize to Invoice model
+          // Normalize to Invoice model with safe column alignment
           const invoice = normalizeInvoiceRow(row);
-          if (invoice.invNo) {
+
+          // Prevent Duplicate Invoice Calculations:
+          // Ensure that only top-level parent invoices (rows containing a valid date and primary invoice number)
+          // are added to the transaction ledger so the Grand Total is calculated accurately without duplicating line items.
+          if (isTopLevelParentInvoice(invoice)) {
             cleanInvoices.push(invoice);
           }
         }
@@ -1168,7 +2081,9 @@
 
       /**
        * Convert SheetJS worksheet into clean normalized Invoice objects:
-       * Supports both JSON rows with column header keys and 2D arrays from Thai cash report exports.
+       * Supports JSON rows with column headers and 2D arrays with title banners.
+       * Filters out header rows, dashed separator lines (----------------), and cleans numeric totals.
+       * Filters out sub-item rows (INV-2, INV-3, or blank date) to prevent duplicate line item totals.
        *
        * @param {Object} worksheet - SheetJS worksheet
        * @returns {Array<Object>} Normalized clean invoices
@@ -1180,36 +2095,29 @@
         const jsonRows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
 
         if (Array.isArray(jsonRows) && jsonRows.length > 0) {
-          const sampleKeys = Object.keys(jsonRows[0] || {}).map(k => k.trim().toLowerCase());
-          const hasRecognizedKeys = sampleKeys.some(k =>
-            k === 'date' || k === 'invoice' || k === 'invno' || k === 'amount' ||
-            k === 'total' || k === 'sales' || k === 'grandtotal' || k === 'grand total' ||
-            k === 'custcode' || k === 'custname' || k === 'salesperson' ||
-            k === 'วันที่' || k === 'เลขที่' || k === 'เลขที่ใบกำกับ' || k === 'จำนวนเงิน' || k === 'ยอดขาย'
-          );
+          const parsedInvoices = [];
+          for (const obj of jsonRows) {
+            // Filter Out Header & Separator Rows:
+            // Skip rows where column values equal placeholder headers like Column1, Column2, Column3, or INVOICE NO.
+            // Skip rows containing dashed lines (e.g., ----------------) or blank entries.
+            if (isNoiseOrHeaderRow(obj)) continue;
 
-          if (hasRecognizedKeys) {
-            const parsedInvoices = [];
-            for (const obj of jsonRows) {
-              if (isNoiseRowObject(obj)) continue;
-              const inv = normalizeObjectRow(obj);
-              if (inv.invNo && isValidInvoiceIdentifier(inv.invNo)) {
-                parsedInvoices.push(inv);
-              } else if (inv.invNo || inv.grandTotal !== 0 || inv.date) {
-                if (!inv.invNo && inv.grandTotal !== 0) {
-                  inv.invNo = `INV-${parsedInvoices.length + 1}`;
-                }
-                parsedInvoices.push(inv);
-              }
-            }
+            const inv = normalizeObjectRow(obj);
 
-            if (parsedInvoices.length > 0) {
-              return parsedInvoices;
+            // Prevent Duplicate Invoice Calculations:
+            // Ensure that only top-level parent invoices (rows containing a valid date and primary invoice number)
+            // are added to the transaction ledger so the Grand Total is calculated accurately without duplicating line items.
+            if (isTopLevelParentInvoice(inv)) {
+              parsedInvoices.push(inv);
             }
+          }
+
+          if (parsedInvoices.length > 0) {
+            return parsedInvoices;
           }
         }
 
-        // 2. 2D array parsing (Thai cash-sales export report with title banners)
+        // 2. 2D array parsing fallback (header: 1)
         const raw2DRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
         return parseInvoiceRows(raw2DRows);
       }
@@ -1221,13 +2129,21 @@
        * @param {string} sourceName - Source label ("Seed Dataset" or filename)
        */
       function applyInvoices(invoices, sourceName) {
+        // Ensure every item is a normalized Invoice instance with complete properties and aliases
+        const normalizedList = (invoices || []).map(item => {
+          if (item && item.customerCode !== undefined && typeof item.grandTotal === 'number') {
+            return item;
+          }
+          return createNormalizedInvoice(item || {});
+        });
+
         // Crucial: Completely replace/overwrite state.rawInvoices with newly parsed array
-        state.rawInvoices = invoices;
+        state.rawInvoices = normalizedList;
         state.sourceName = sourceName;
         currentInvoices = state.rawInvoices;
 
         // Auto-detect elapsed working days from unique dates in the dataset
-        const uniqueDates = new Set(invoices.map(inv => inv.date).filter(Boolean));
+        const uniqueDates = new Set(normalizedList.map(inv => inv.date).filter(Boolean));
         const detectedDays = uniqueDates.size > 0 ? uniqueDates.size : 1;
         const inputElapsed = document.getElementById('inputElapsedDays');
         if (inputElapsed) {
@@ -1249,13 +2165,13 @@
         const badgeDataSource = document.getElementById('badgeDataSource');
 
         if (statusMessage) {
-          statusMessage.textContent = `Status: Active dataset from ${sourceName} with ${invoices.length} valid HS invoices.`;
+          statusMessage.textContent = `Status: Active dataset from ${sourceName} with ${normalizedList.length} valid HS invoices.`;
         }
         if (invoiceCountTag) {
-          invoiceCountTag.textContent = `${invoices.length} Invoices`;
+          invoiceCountTag.textContent = `${normalizedList.length} Invoices`;
         }
         if (parseSummaryBadge) {
-          parseSummaryBadge.textContent = `${invoices.length} valid invoices loaded`;
+          parseSummaryBadge.textContent = `${normalizedList.length} valid invoices loaded`;
         }
         if (badgeDataSource) {
           if (sourceName === 'Seed Dataset') {
@@ -1679,13 +2595,59 @@
       }
 
       /**
+       * Switch active ledger filter view:
+       * - 'dedup': Deduplicated (HS + Standalone AI)
+       * - 'hs_only': HS Cash Sales Only
+       * - 'ai_only': AI Advance Deposits Only
+       * - 'all': All Records (unfiltered)
+       */
+      function setLedgerFilter(filterMode) {
+        state.ledgerFilter = filterMode;
+
+        const activeClass = 'px-2.5 py-1 rounded text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200/80 transition shadow-2xs';
+        const inactiveClass = 'px-2.5 py-1 rounded text-xs font-medium text-slate-600 hover:text-slate-900 border border-transparent transition';
+
+        const btnDedup = document.getElementById('btnLedgerDedup');
+        const btnHs = document.getElementById('btnLedgerHsOnly');
+        const btnAi = document.getElementById('btnLedgerAiOnly');
+        const btnAll = document.getElementById('btnLedgerAll');
+
+        if (btnDedup) btnDedup.className = filterMode === 'dedup' ? activeClass : inactiveClass;
+        if (btnHs) btnHs.className = filterMode === 'hs_only' ? activeClass : inactiveClass;
+        if (btnAi) btnAi.className = filterMode === 'ai_only' ? activeClass : inactiveClass;
+        if (btnAll) btnAll.className = filterMode === 'all' ? activeClass : inactiveClass;
+
+        updateDashboard();
+      }
+      window.setLedgerFilter = setLedgerFilter;
+
+      /**
        * Milestone M3: Wire pure math calculations to the DOM.
        * Updates Target Pace, Forecast Range, and Headline KPI cards in real time.
        */
       function updateDashboard() {
-        const invoices = state.rawInvoices || currentInvoices;
+        const invoices = getActiveInvoices();
 
-        // Step 1: Cumulative sales MTD from current invoices
+        // Update Paired AI Deduplication Badge
+        const rawList = state.rawInvoices || currentInvoices || [];
+        const dedupedList = deduplicatePairedInvoices(rawList);
+        const pairedCount = Math.max(0, rawList.length - dedupedList.length);
+        state.pairedDepositCount = pairedCount;
+
+        const pairedBadge = document.getElementById('pairedDeduplicationBadge');
+        if (pairedBadge) {
+          if (pairedCount > 0 && state.ledgerFilter === 'dedup') {
+            pairedBadge.textContent = `${pairedCount} Paired AI Deduplicated`;
+            pairedBadge.classList.remove('hidden');
+          } else if (pairedCount > 0 && state.ledgerFilter === 'all') {
+            pairedBadge.textContent = `${pairedCount} Paired AI (Raw/Included)`;
+            pairedBadge.classList.remove('hidden');
+          } else {
+            pairedBadge.classList.add('hidden');
+          }
+        }
+
+        // Step 1: Cumulative sales MTD from active invoices
         const salesToDate = invoices.reduce((sum, inv) => {
           const amt = inv.grandTotal ?? inv.amount ?? inv.Amount ?? inv.total ?? inv.Total ?? inv.sales ?? 0;
           return sum + (typeof amt === 'number' && !isNaN(amt) ? amt : 0);
@@ -1805,7 +2767,14 @@
         const kpiRunRateSub = document.getElementById('kpiRunRateSub');
 
         if (kpiSalesVal) kpiSalesVal.textContent = formatTHB(roundedSalesToDate);
-        if (kpiInvoicesSub) kpiInvoicesSub.textContent = `${currentInvoices.length} Invoices (${uniqueCustomers} Cust)`;
+        if (kpiInvoicesSub) {
+          let filterNote = '';
+          if (state.ledgerFilter === 'hs_only') filterNote = ' [HS Only]';
+          else if (state.ledgerFilter === 'ai_only') filterNote = ' [AI Only]';
+          else if (state.ledgerFilter === 'all') filterNote = ' [All Raw]';
+          else if (state.pairedDepositCount > 0) filterNote = ' [Deduped]';
+          kpiInvoicesSub.textContent = `${invoices.length} Invoices (${uniqueCustomers} Cust)${filterNote}`;
+        }
         if (kpiProjectedVal) kpiProjectedVal.textContent = formatTHB(runRate);
         if (kpiProjectedSub) kpiProjectedSub.textContent = `Based on ${elapsedDays} of ${totalDays} days`;
         if (kpiPaceVal) {
@@ -1817,7 +2786,7 @@
         if (kpiRunRateSub) kpiRunRateSub.textContent = `Avg ${formatTHB(avgInvoiceValue)} / invoice`;
 
         // Step 7: Render Milestone M4 Visual Charts
-        const dailyAggregates = aggregateDailySales(currentInvoices);
+        const dailyAggregates = aggregateDailySales(invoices);
         renderTrajectoryChart(roundedSalesToDate, elapsedDays, totalDays, monthlyTarget, runRate, dailyAggregates);
         renderForecastRangeChart(roundedSalesToDate, elapsedDays, totalDays, forecastRange, dailyAggregates);
 
@@ -1902,7 +2871,7 @@
 
         if (!tableBody) return;
 
-        const invoices = state.rawInvoices || currentInvoices;
+        const invoices = getActiveInvoices();
         const query = (currentSearchQuery || '').toLowerCase().trim();
         const filtered = invoices.filter(inv => {
           if (!query) return true;
@@ -1953,13 +2922,19 @@
 
         tableBody.innerHTML = rowsToDisplay.map((inv, idx) => {
           const rowNum = idx + 1;
+          const isAi = String(inv.invNo || '').trim().toUpperCase().startsWith('AI');
+          const badgeStyle = isAi ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-blue-50 text-blue-700 border-blue-200';
           return `
             <tr class="hover:bg-slate-50/80 transition-colors">
               <td class="px-4 py-2.5 font-mono text-slate-400 text-[11px]">${rowNum}</td>
               <td class="px-4 py-2.5 whitespace-nowrap text-slate-600 font-medium">${escapeHTML(inv.date)}</td>
-              <td class="px-4 py-2.5 whitespace-nowrap font-mono font-semibold text-blue-700">${escapeHTML(inv.invNo)}</td>
+              <td class="px-4 py-2.5 whitespace-nowrap font-mono font-semibold">
+                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs border ${badgeStyle}">
+                  ${escapeHTML(inv.invNo)}
+                </span>
+              </td>
               <td class="px-4 py-2.5 whitespace-nowrap font-mono text-slate-500">${escapeHTML(inv.custCode)}</td>
-              <td class="px-4 py-2.5 max-w-xs truncate font-medium text-slate-800" title="${escapeHTML(inv.custName)}">${escapeHTML(inv.custName)}</td>
+              <td class="px-4 py-2.5 max-w-xs truncate font-medium text-slate-800" title="${escapeHTML(inv.custName)}">${escapeHTML(inv.custName || '-')}</td>
               <td class="px-4 py-2.5 whitespace-nowrap text-center">
                 <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-600">
                   ${escapeHTML(inv.salesperson || '-')}
@@ -2204,8 +3179,27 @@
 
         if (exportCsvBtn) {
           exportCsvBtn.addEventListener('click', () => {
-            exportInvoicesToCSV(state.rawInvoices || currentInvoices);
+            exportInvoicesToCSV(getActiveInvoices());
           });
+        }
+
+        // Ledger View & Deduplication toggle buttons
+        const btnLedgerDedup = document.getElementById('btnLedgerDedup');
+        const btnLedgerHsOnly = document.getElementById('btnLedgerHsOnly');
+        const btnLedgerAiOnly = document.getElementById('btnLedgerAiOnly');
+        const btnLedgerAll = document.getElementById('btnLedgerAll');
+
+        if (btnLedgerDedup) {
+          btnLedgerDedup.addEventListener('click', () => setLedgerFilter('dedup'));
+        }
+        if (btnLedgerHsOnly) {
+          btnLedgerHsOnly.addEventListener('click', () => setLedgerFilter('hs_only'));
+        }
+        if (btnLedgerAiOnly) {
+          btnLedgerAiOnly.addEventListener('click', () => setLedgerFilter('ai_only'));
+        }
+        if (btnLedgerAll) {
+          btnLedgerAll.addEventListener('click', () => setLedgerFilter('all'));
         }
 
         if (reloadSeedBtn) {
@@ -2216,6 +3210,7 @@
               currentSearchQuery = '';
             }
             isShowingAllRows = false;
+            setLedgerFilter('dedup');
             applyInvoices(SEED_INVOICES, 'Seed Dataset');
             showNotification('success', 'Reset Complete', 'Restored 30-invoice in-memory seed dataset.');
           });
