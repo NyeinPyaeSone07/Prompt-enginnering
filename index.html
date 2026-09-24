@@ -1,19 +1,17 @@
 <!--
 ================================================================================
 Sales Intelligence Dashboard (Track A)
-Milestone: M5 - Trend & Forecast Page
+Milestone: M8 - Multi-File Batch Ingestion Polish
 Delivers:
-  - Shared month selector across Overview and Trend & Forecast pages
-  - Chart 1: Monthly revenue line with 3-month moving average (MA-3) overlaid;
-             graceful notification if <12 months data for YoY prior year comparison
-  - Chart 2: Seasonal index bar chart, one bar per calendar month present in data
-  - Chart 3: Forecast band (Low / Base / High) for selected month drawn against
-             actual historical bars
-  - Table 4: Accuracy log table for closed months (15th cutoff pace vs final actual,
-             error %, running MAPE), persisted to localStorage across browser sessions
-  - Backtest mode: Selecting an older month (or toggling backtest) recomputes 1-4
-             at 15th-day cutoff to visibly test forecast accuracy against closed months
-  - Extended runChecks() verifying M5 calculations, backtesting, and localStorage
+  - Multi-file simultaneous drag-and-drop & file picker support
+  - Ingests mixed file formats (.csv, .xlsx) and report types (Cash, Credit, Deposits)
+    in a single action with automatic per-file classification & de-duplication
+  - Safe handling of unrecognized files: displayed as "Unrecognized file — skipped"
+    without crashing or interrupting the batch
+  - Unified ingestion summary table showing per-file status, encoding, rows, and skips
+  - Automatic cross-page synchronization: populates Overview, Trend & Forecast,
+    Product & Category, and Customer & Cash Flow immediately upon drop
+  - Comprehensive runChecks() test suite covering M1-M8 with 27 assertions
 ================================================================================
 -->
 <!doctype html>
@@ -2222,7 +2220,7 @@ Delivers:
 
     <!-- Footer -->
     <footer class="app-footer">
-      <span>Sales Intelligence Dashboard (Track A) • Milestone M7: Customer &amp; Cash Flow</span>
+      <span>Sales Intelligence Dashboard (Track A) • Milestone M8: Multi-File Batch Ingestion</span>
       <span id="footer-check-info">Self-Checks: All green</span>
     </footer>
   </div>
@@ -2532,9 +2530,11 @@ Delivers:
      * Detects report type from header/title rows
      */
     function detectReportType(rawRows) {
+      if (!rawRows || !Array.isArray(rawRows) || rawRows.length === 0) return 'unrecognized';
       const scanLimit = Math.min(rawRows.length, 30);
       for (let i = 0; i < scanLimit; i++) {
-        const lineText = rawRows[i].join(' ');
+        const row = rawRows[i];
+        const lineText = Array.isArray(row) ? row.join(' ') : String(row || '');
         if (lineText.includes(REPORT_TITLES.CASH)) return 'cash';
         if (lineText.includes(REPORT_TITLES.CREDIT)) return 'credit';
         if (lineText.includes(REPORT_TITLES.DEPOSIT)) return 'deposit';
@@ -6443,8 +6443,13 @@ Delivers:
       }
 
       card.classList.remove('hidden');
-      const fileCount = store.metrics.filesUploaded.length;
-      countLabel.textContent = `${fileCount} file${fileCount > 1 ? 's' : ''} ingested`;
+      const validFiles = store.metrics.filesUploaded.filter(f => f.reportType !== 'unrecognized').length;
+      const skippedFiles = store.metrics.filesUploaded.length - validFiles;
+      if (skippedFiles > 0) {
+        countLabel.textContent = `${validFiles} file${validFiles !== 1 ? 's' : ''} ingested (${skippedFiles} skipped)`;
+      } else {
+        countLabel.textContent = `${validFiles} file${validFiles !== 1 ? 's' : ''} ingested`;
+      }
 
       // Update Combined KPI Cards across all files
       const elRevenue = document.getElementById('kpi-total-revenue');
@@ -6484,38 +6489,48 @@ Delivers:
 
       // Render Uploaded Files Log
       tbody.innerHTML = store.metrics.filesUploaded.map(res => {
+        const isUnrec = res.reportType === 'unrecognized';
+
         const typeBadge = res.reportType === 'cash'
           ? '<span class="badge-report-type badge-cash">Cash Sales</span>'
           : res.reportType === 'credit'
           ? '<span class="badge-report-type badge-credit">Credit Sales</span>'
           : res.reportType === 'deposit'
           ? '<span class="badge-report-type badge-deposit">Deposits</span>'
-          : '<span class="badge-report-type badge-unrecognized">Unrecognized</span>';
+          : '<span class="badge-report-type badge-unrecognized" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.35);">Unrecognized file — skipped</span>';
 
-        const addedText = res.reportType === 'deposit'
-          ? `+${res.newAdded.toLocaleString()} deps`
-          : `+${res.newAdded.toLocaleString()} tx`;
+        const addedText = isUnrec
+          ? '<span style="color: var(--text-muted);">-</span>'
+          : (res.reportType === 'deposit'
+              ? `+${(res.newAdded || 0).toLocaleString()} deps`
+              : `+${(res.newAdded || 0).toLocaleString()} tx`);
 
-        const dupeText = res.duplicatesSkipped > 0
-          ? `<span style="color: var(--warning-text); font-weight: 600;">${res.duplicatesSkipped.toLocaleString()} skipped</span>`
-          : `<span style="color: var(--text-muted);">0</span>`;
+        const dupeText = isUnrec
+          ? '<span style="color: var(--text-muted);">-</span>'
+          : (res.duplicatesSkipped > 0
+              ? `<span style="color: var(--warning-text); font-weight: 600;">${res.duplicatesSkipped.toLocaleString()} skipped</span>`
+              : `<span style="color: var(--text-muted);">0</span>`);
 
-        const statusPill = res.reportType !== 'unrecognized'
-          ? `<span style="color: var(--success); font-weight: 600;">✓ Ingested</span>`
-          : `<span style="color: var(--danger); font-weight: 600;">⚠ Failed</span>`;
+        const rowsText = isUnrec
+          ? `<span style="color: var(--text-muted);">${(res.rowsRead || 0).toLocaleString()} read</span>`
+          : `${(res.rowsRead || 0).toLocaleString()} / <span style="color: var(--text-muted);">${(res.rowsSkipped || 0).toLocaleString()}</span>`;
+
+        const statusPill = isUnrec
+          ? `<span style="color: var(--warning-text); font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">⚠ Unrecognized file — skipped</span>`
+          : `<span style="color: var(--success); font-weight: 600;">✓ Ingested</span>`;
 
         return `
-          <tr>
+          <tr style="${isUnrec ? 'background: rgba(245, 158, 11, 0.04);' : ''}">
             <td style="font-weight: 500;">
               <div>${sanitizeText(res.fileName)}</div>
               <div style="font-size: 11px; color: var(--text-muted);">${formatFileSize(res.fileSize)}</div>
             </td>
             <td>${typeBadge}</td>
-            <td><span class="badge-encoding">${sanitizeText(res.encoding)}</span></td>
+            <td><span class="badge-encoding">${sanitizeText(res.encoding || '-')}</span></td>
             <td class="text-num" style="font-weight: 600;">${addedText}</td>
             <td class="text-num">${dupeText}</td>
             <td class="text-num" style="font-size: 12px; color: var(--text-secondary);">
-              ${res.rowsRead.toLocaleString()} / <span style="color: var(--text-muted);">${res.rowsSkipped.toLocaleString()}</span>
+              ${rowsText}
             </td>
             <td>${statusPill}</td>
           </tr>
@@ -6526,12 +6541,20 @@ Delivers:
     async function handleIncomingFiles(fileList) {
       if (!fileList || fileList.length === 0) return;
 
+      const filesArray = Array.from(fileList);
       const loading = document.getElementById('parse-loading');
-      if (loading) loading.classList.remove('hidden');
+      if (loading) {
+        loading.textContent = `Parsing ${filesArray.length} file${filesArray.length > 1 ? 's' : ''}, please wait...`;
+        loading.classList.remove('hidden');
+      }
 
-      try {
-        for (let i = 0; i < fileList.length; i++) {
-          const file = fileList[i];
+      for (let i = 0; i < filesArray.length; i++) {
+        const file = filesArray[i];
+        if (loading) {
+          loading.textContent = `Parsing (${i + 1}/${filesArray.length}): ${file.name}...`;
+        }
+
+        try {
           const { rawRows, encoding, format } = await parseFileToRows(file);
           const classified = classifyRows(rawRows);
 
@@ -6542,24 +6565,40 @@ Delivers:
             encoding,
             format
           });
+        } catch (err) {
+          console.warn(`File parsing failed for ${file.name}:`, err);
+          // Gracefully record as unrecognized file so remaining batch continues smoothly
+          store.metrics.filesUploaded.push({
+            fileName: file.name,
+            fileSize: file.size,
+            encoding: '-',
+            format: (file.name.split('.').pop() || 'unknown').toLowerCase(),
+            reportType: 'unrecognized',
+            newAdded: 0,
+            duplicatesSkipped: 0,
+            rowsRead: 0,
+            rowsSkipped: 0
+          });
         }
-      } catch (err) {
-        console.error('File parsing error:', err);
-      } finally {
-        if (loading) loading.classList.add('hidden');
-        renderSummaryTable();
-        // Set selectedMonth and overviewSelectedMonth to latest month from loaded files if available
-        const months = getDistinctMonths();
-        if (months.length > 0) {
+      }
+
+      if (loading) loading.classList.add('hidden');
+      renderSummaryTable();
+      // Set selectedMonth and overviewSelectedMonth to latest month from loaded files if available
+      const months = getDistinctMonths();
+      if (months.length > 0) {
+        if (!store.overviewSelectedMonth || !months.includes(store.overviewSelectedMonth)) {
           store.overviewSelectedMonth = months[months.length - 1];
+        }
+        if (!store.selectedMonth || !months.includes(store.selectedMonth)) {
           store.selectedMonth = months[months.length - 1];
         }
-        updateAccuracyLog();
-        renderOverviewPage();
-        renderTrendPage();
-        renderProductPage();
-        renderCustomerPage();
       }
+      updateAccuracyLog();
+      renderOverviewPage();
+      renderTrendPage();
+      renderProductPage();
+      renderCustomerPage();
     }
 
     function clearStore() {
@@ -6583,9 +6622,11 @@ Delivers:
     }
 
     function handleFileInputChange(event) {
-      if (event.target.files) {
+      if (event.target.files && event.target.files.length > 0) {
         handleIncomingFiles(event.target.files);
       }
+      // Reset input value so selecting the same files again triggers change event
+      event.target.value = '';
     }
 
     function handleDragOver(event) {
@@ -6608,7 +6649,7 @@ Delivers:
       const box = document.getElementById('dropzone-box');
       if (box) box.classList.remove('dragover');
 
-      if (event.dataTransfer && event.dataTransfer.files) {
+      if (event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files.length > 0) {
         handleIncomingFiles(event.dataTransfer.files);
       }
     }
@@ -7148,8 +7189,107 @@ Delivers:
         m7Empty
       );
 
+      // --- Milestone M8 Self-Tests (Multi-File Mixed-Type Ingestion & Unrecognized Files) ---
+      // Test Case 26: Simultaneous classification of 4 mixed-type reports (Cash, Credit, Deposit, Unrecognized)
+      const mockCashReport = [
+        ['  รายงานขายเงินสด เรียงตามวันที่'],
+        ['01/03/2569', 'INV6903-888', 'CUST-888', 'Somchai Roofing', '04', '1', '', 10000.00, 700.00, 10700.00, 0.00, 10700.00, 0.00, 0.00],
+        ['', 1, '01-001 - Metal Sheet Blue 0.35mm', 100.00, 'เมตร', 100.00, '', 10000.00]
+      ];
+      const mockCreditReport = [
+        ['  รายงานใบกำกับสินค้า เรียงตามวันที่'],
+        ['05/03/2569', 'CR6903-888', 'Somchai Roofing', '04', '1', '', 20000.00, 1400.00, 21400.00, '15/04/2569', 'SO6903/01', 'Y'],
+        ['', 1, '88-001 - PU Foam Sheet 25mm', 50.00, 'PCS', 400.00, '', 20000.00]
+      ];
+      const mockDepositReport = [
+        ['  รายงานใบรับมัดจำ แยกตามลูกค้า'],
+        ['Somchai Roofing / CUST-888'],
+        ['', 'DEP6903-888', '10/03/2569', '04', '1', 5000.00, 350.00, 5350.00, '15/04/2569', 5350.00, 'N', 5350.00, 0.00]
+      ];
+      const mockUnrecognizedReport = [
+        ['Employee Shift Schedule', 'Bangkok Warehouse', 'Period: March 2026'],
+        ['EmpID', 'Full Name', 'Role', 'Status'],
+        ['E-001', 'Kitti P.', 'Forklift Driver', 'Active'],
+        ['E-002', 'Suthep M.', 'Machine Operator', 'Active']
+      ];
+
+      const typeCash = detectReportType(mockCashReport);
+      const typeCredit = detectReportType(mockCreditReport);
+      const typeDeposit = detectReportType(mockDepositReport);
+      const typeUnrecognized = detectReportType(mockUnrecognizedReport);
+
+      const classCash = classifyRows(mockCashReport);
+      const classCredit = classifyRows(mockCreditReport);
+      const classDeposit = classifyRows(mockDepositReport);
+      const classUnrec = classifyRows(mockUnrecognizedReport);
+
+      assert(
+        'M8 Multi-File Classification: Distinguishes cash, credit, deposit, and flags unknown report as "unrecognized"',
+        typeCash === 'cash' &&
+        typeCredit === 'credit' &&
+        typeDeposit === 'deposit' &&
+        typeUnrecognized === 'unrecognized' &&
+        classCash.reportType === 'cash' &&
+        classCredit.reportType === 'credit' &&
+        classDeposit.reportType === 'deposit' &&
+        classUnrec.reportType === 'unrecognized' &&
+        classUnrec.transactions.length === 0 &&
+        classUnrec.deposits.length === 0,
+        { typeCash, typeCredit, typeDeposit, typeUnrecognized }
+      );
+
+      // Test Case 27: Multi-file batch merge simulation without crash and store isolation
+      const snapTx = [...store.transactions];
+      const snapItems = [...store.lineItems];
+      const snapDeps = [...store.deposits];
+      const snapSeenTx = new Set(store.seenTxIds);
+      const snapSeenItems = new Set(store.seenItemKeys);
+      const snapSeenDeps = new Set(store.seenDepositIds);
+      const snapFiles = [...store.metrics.filesUploaded];
+      const snapMetrics = { ...store.metrics };
+
+      // Batch merge all 4 simulated files
+      mergeIntoStore(classCash, { fileName: 'Cash_Sales.csv', fileSize: 1024, encoding: 'UTF-8', format: 'csv' });
+      mergeIntoStore(classCredit, { fileName: 'Credit_Sales.xlsx', fileSize: 2048, encoding: 'XLSX native', format: 'xlsx' });
+      mergeIntoStore(classDeposit, { fileName: 'Deposits.csv', fileSize: 1536, encoding: 'windows-874', format: 'csv' });
+      mergeIntoStore(classUnrec, { fileName: 'Shift_Schedule.csv', fileSize: 512, encoding: 'UTF-8', format: 'csv' });
+
+      const batchFiles = store.metrics.filesUploaded.slice(-4);
+      const unrecInBatch = batchFiles.find(f => f.fileName === 'Shift_Schedule.csv');
+      const hasAddedTx = store.seenTxIds.has('INV6903-888') && store.seenTxIds.has('CR6903-888');
+      const hasAddedDep = store.seenDepositIds.has('DEP6903-888');
+
+      // Verify calculations work across all 4 pages with the merged batch
+      const overviewCheck = computeOverviewMetrics('2026-03');
+      const productCheck = getProductData();
+      const customerCheck = getCustomerData(store.transactions, store.deposits);
+
+      assert(
+        'M8 Multi-File Ingestion & Safety: Ingests mixed valid files, safely skips unrecognized file, and populates all analytics without crash',
+        unrecInBatch !== null &&
+        unrecInBatch.reportType === 'unrecognized' &&
+        unrecInBatch.newAdded === 0 &&
+        hasAddedTx &&
+        hasAddedDep &&
+        overviewCheck !== null &&
+        productCheck !== null &&
+        customerCheck !== null &&
+        customerCheck.salespersonLeaderboard[0].salespersonCode === '04',
+        { unrecInBatch, hasAddedTx, hasAddedDep }
+      );
+
+      // Restore store snapshot to maintain pristine environment
+      store.transactions = snapTx;
+      store.lineItems = snapItems;
+      store.deposits = snapDeps;
+      store.seenTxIds = snapSeenTx;
+      store.seenItemKeys = snapSeenItems;
+      store.seenDepositIds = snapSeenDeps;
+      store.metrics.filesUploaded = snapFiles;
+      Object.assign(store.metrics, snapMetrics);
+
       const allPassed = results.every(r => r.passed);
-      console.log(`=== M7 runChecks() finished: ${results.filter(r => r.passed).length}/${results.length} PASSED ===`);
+      console.log(`=== M8 runChecks() finished: ${results.filter(r => r.passed).length}/${results.length} PASSED ===`);
       console.groupEnd();
 
       // Update UI indicator
