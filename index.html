@@ -11,7 +11,7 @@ Delivers:
   - Unified ingestion summary table showing per-file status, encoding, rows, and skips
   - Automatic cross-page synchronization: populates Overview, Trend & Forecast,
     Product & Category, and Customer & Cash Flow immediately upon drop
-  - Comprehensive runChecks() test suite covering M1-M8 with 27 assertions
+  - Comprehensive runChecks() test suite covering M1-M8 with 40 assertions
 ================================================================================
 -->
 <!doctype html>
@@ -1264,7 +1264,7 @@ Delivers:
     <div class="auth-card">
       <span class="auth-badge">Track A • Sales Intelligence</span>
       <h1 class="auth-title">Welcome</h1>
-      <p class="auth-subtitle">Enter your name to access the Sales Forecast &amp; Analysis Assistant.</p>
+      <p class="auth-subtitle">Sign in to access the Sales Forecast &amp; Analysis Assistant.</p>
 
       <form id="login-form" class="auth-form" onsubmit="handleLoginSubmit(event)">
         <div class="form-group">
@@ -1280,12 +1280,20 @@ Delivers:
           />
         </div>
 
-        <button type="submit" id="btn-login" class="btn-primary">Continue</button>
+        <div class="form-group">
+          <label for="login-password" class="form-label">Password</label>
+          <input id="login-password" class="form-input" type="password" autocomplete="current-password" required />
+        </div>
+        <label class="form-label" style="display:flex;gap:8px;align-items:center;">
+          <input id="login-remember" type="checkbox" /> Keep me signed in on this device
+        </label>
+        <div id="login-error" role="alert" style="color: var(--danger); font-size: 13px; min-height: 18px;"></div>
+        <button type="submit" id="btn-login" class="btn-primary">Sign in</button>
       </form>
 
       <!-- Required explicit disclaimer -->
       <div class="auth-disclaimer">
-        Demo access only — not a security feature.
+        Password is checked in the browser: keeps casual visitors out, but is not server-side security.
       </div>
     </div>
   </div>
@@ -1305,6 +1313,13 @@ Delivers:
 
         <!-- 4 Navigation Tabs -->
         <nav class="nav-tabs" aria-label="Dashboard Pages">
+          <button
+            class="nav-tab-btn"
+            data-tab="import"
+            onclick="switchTab('import')"
+          >
+            Data Import
+          </button>
           <button
             class="nav-tab-btn active"
             data-tab="overview"
@@ -1346,6 +1361,7 @@ Delivers:
 
     <!-- Main Content Container -->
     <main class="main-container">
+      <section id="panel-import" class="import-panel hidden">
       <!-- Dropzone Area (M1: Wired with PARSE_TEXT and CLASSIFY) -->
       <section class="dropzone-card" aria-labelledby="dropzone-heading">
         <div class="dropzone-header">
@@ -1459,6 +1475,10 @@ Delivers:
               </table>
             </div>
           </div>
+        </div>
+      </section>
+        <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+          <button class="btn-primary" onclick="switchTab('overview')">Go to Overview &rarr;</button>
         </div>
       </section>
 
@@ -2230,6 +2250,43 @@ Delivers:
        ============================================================= -->
   <script>
     /* ================= CONFIG ================= */
+    /* ===== LOGIN PASSWORD =====
+    Default password: Sales@2026   (CHANGE IT)
+    To set a new one: open the page, press F12 > Console, run  makePasswordHash('your new password')
+    then paste the printed text into AUTH_PASSWORD_HASH below. */
+    const AUTH_SALT = 'sid-roofing-2026';
+    const AUTH_PASSWORD_HASH = 'fb904bdf2a0c05e1118b5b0a618eab2e79d31f3f18e505c8c7df21e1cc0ee316';
+    function sha256Hex(str) {
+      const bytes = new TextEncoder().encode(str);
+      const primes = []; for (let n = 2; primes.length < 64; n++) if (primes.every(q => n % q)) primes.push(n);
+      const fr = x => Math.floor((x - Math.floor(x)) * 4294967296);
+      const K = primes.map(x => fr(Math.cbrt(x)));
+      let H = primes.slice(0, 8).map(x => fr(Math.sqrt(x)));
+      const l = bytes.length, nb = ((l + 9 + 63) >> 6) << 6, m = new Uint8Array(nb);
+      m.set(bytes); m[l] = 0x80;
+      const dv = new DataView(m.buffer);
+      dv.setUint32(nb - 4, (l * 8) >>> 0); dv.setUint32(nb - 8, Math.floor(l * 8 / 4294967296));
+      const rr = (x, n) => (x >>> n) | (x << (32 - n));
+      for (let o = 0; o < nb; o += 64) {
+        const w = new Array(64);
+        for (let i = 0; i < 16; i++) w[i] = dv.getUint32(o + i * 4);
+        for (let i = 16; i < 64; i++) {
+          const s0 = rr(w[i-15], 7) ^ rr(w[i-15], 18) ^ (w[i-15] >>> 3);
+          const s1 = rr(w[i-2], 17) ^ rr(w[i-2], 19) ^ (w[i-2] >>> 10);
+          w[i] = (w[i-16] + s0 + w[i-7] + s1) | 0;
+        }
+        let [a, b, c, d, e, f, g, h] = H;
+        for (let i = 0; i < 64; i++) {
+          const t1 = (h + (rr(e,6) ^ rr(e,11) ^ rr(e,25)) + ((e & f) ^ (~e & g)) + K[i] + w[i]) | 0;
+          const t2 = ((rr(a,2) ^ rr(a,13) ^ rr(a,22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+          h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+        }
+        H = H.map((x, i) => (x + [a, b, c, d, e, f, g, h][i]) | 0);
+      }
+      return H.map(x => (x >>> 0).toString(16).padStart(8, '0')).join('');
+    }
+
+    window.makePasswordHash = pw => sha256Hex(AUTH_SALT + pw);
     const STORAGE_KEY_AUTH = 'sid_demo_logged_in';
     const STORAGE_KEY_USER = 'sid_demo_user_name';
     const STORAGE_KEY_TAB  = 'sid_active_tab';
@@ -2413,66 +2470,43 @@ Delivers:
      * and escaped quotes ("").
      */
     function parseCSV(text) {
-      const rows = [];
-      let currentRow = [];
-      let currentField = '';
-      let inQuotes = false;
+      if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+      const lines = text.split(/\r\n|\n|\r/);
+      if (lines.length && lines[lines.length - 1] === '') lines.pop();
+      return lines.map(parseCSVLine);
+    }
+
+    /* A quote only opens a quoted field at the START of a field and only closes
+       when followed by a comma / end of line. A stray quote inside text
+       (e.g. 2" pipe) stays literal, so it can no longer swallow following rows. */
+    function parseCSVLine(line) {
+      const out = [];
+      const n = line.length;
       let i = 0;
-      const len = text.length;
-
-      while (i < len) {
-        const char = text[i];
-
-        if (inQuotes) {
-          if (char === '"') {
-            if (i + 1 < len && text[i + 1] === '"') {
-              currentField += '"';
-              i += 2;
-            } else {
-              inQuotes = false;
-              i++;
+      while (i <= n) {
+        if (line[i] === '"') {
+          let j = i + 1, val = '', closed = false;
+          while (j < n) {
+            if (line[j] === '"') {
+              if (line[j + 1] === '"') { val += '"'; j += 2; continue; }
+              if (j + 1 === n || line[j + 1] === ',') { closed = true; break; }
             }
-          } else {
-            currentField += char;
-            i++;
+            val += line[j++];
           }
-        } else {
-          if (char === '"') {
-            inQuotes = true;
-            i++;
-          } else if (char === ',') {
-            currentRow.push(currentField);
-            currentField = '';
-            i++;
-          } else if (char === '\r') {
-            if (i + 1 < len && text[i + 1] === '\n') {
-              i += 2;
-            } else {
-              i++;
-            }
-            currentRow.push(currentField);
-            rows.push(currentRow);
-            currentRow = [];
-            currentField = '';
-          } else if (char === '\n') {
-            currentRow.push(currentField);
-            rows.push(currentRow);
-            currentRow = [];
-            currentField = '';
-            i++;
-          } else {
-            currentField += char;
-            i++;
+          if (closed) {
+            out.push(val);
+            if (j + 1 === n) break;
+            i = j + 2;
+            continue;
           }
         }
+        let k = line.indexOf(',', i);
+        if (k === -1) k = n;
+        out.push(line.slice(i, k));
+        i = k + 1;
+        if (k === n) break;
       }
-
-      if (currentField !== '' || currentRow.length > 0) {
-        currentRow.push(currentField);
-        rows.push(currentRow);
-      }
-
-      return rows;
+      return out;
     }
 
     /**
@@ -2484,10 +2518,12 @@ Delivers:
 
       if (isXlsx) {
         const buffer = await file.arrayBuffer();
+        if (typeof XLSX === 'undefined') throw new Error('Excel library (SheetJS) failed to load - check internet connection');
         const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[firstSheetName];
-        const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
+        let rawRows = [];
+        for (const name of workbook.SheetNames) {
+          rawRows = rawRows.concat(XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1, raw: false, defval: '' }));
+        }
         return {
           rawRows: rawRows.map(row => (row || []).map(cell => cell != null ? String(cell).trim() : '')),
           encoding: 'XLSX native',
@@ -2641,19 +2677,22 @@ Delivers:
             continue;
           }
 
-          const desc = cellStr(row[2]);
+          // Some exports split "99-100 -" and the description into two cells: shift columns by 1
+          const codeOnly = /^\d{2}-\d{3}\s*-?$/.test(cellStr(row[2])) && cellStr(row[3]) !== '';
+          const o = codeOnly ? 1 : 0;
+          const desc = codeOnly ? `${cellStr(row[2])} ${cellStr(row[3])}`.replace(/\s*-\s*/, ' - ').trim() : cellStr(row[2]);
           items.push({
             transactionId: currentTx.id,
             seq: parseInt(cell1, 10),
             categoryCode: extractCategoryCode(desc),
             productCode: extractProductCode(desc),
             description: desc,
-            qty: parseNum(row[3]),
-            unit: cellStr(row[4]),
-            unitPrice: parseNum(row[5]),
-            discount: parseNum(row[6]),
-            amount: parseNum(row[7]),
-            soRef: cellStr(row[8])
+            qty: parseNum(row[3 + o]),
+            unit: cellStr(row[4 + o]),
+            unitPrice: parseNum(row[5 + o]),
+            discount: parseNum(row[6 + o]),
+            amount: parseNum(row[7 + o]),
+            soRef: cellStr(row[8 + o])
           });
           continue;
         }
@@ -2732,19 +2771,22 @@ Delivers:
             continue;
           }
 
-          const desc = cellStr(row[2]);
+          // Some exports split "99-100 -" and the description into two cells: shift columns by 1
+          const codeOnly = /^\d{2}-\d{3}\s*-?$/.test(cellStr(row[2])) && cellStr(row[3]) !== '';
+          const o = codeOnly ? 1 : 0;
+          const desc = codeOnly ? `${cellStr(row[2])} ${cellStr(row[3])}`.replace(/\s*-\s*/, ' - ').trim() : cellStr(row[2]);
           items.push({
             transactionId: currentTx.id,
             seq: parseInt(cell1, 10),
             categoryCode: extractCategoryCode(desc),
             productCode: extractProductCode(desc),
             description: desc,
-            qty: parseNum(row[3]),
-            unit: cellStr(row[4]),
-            unitPrice: parseNum(row[5]),
-            discount: parseNum(row[6]),
-            amount: parseNum(row[7]),
-            soRef: cellStr(row[8])
+            qty: parseNum(row[3 + o]),
+            unit: cellStr(row[4 + o]),
+            unitPrice: parseNum(row[5 + o]),
+            discount: parseNum(row[6 + o]),
+            amount: parseNum(row[7 + o]),
+            soRef: cellStr(row[8 + o])
           });
           continue;
         }
@@ -6391,8 +6433,8 @@ Delivers:
     }
 
     function switchTab(tabId) {
-      const validTabs = ['overview', 'trend', 'product', 'customer'];
-      if (!validTabs.includes(tabId)) tabId = 'overview';
+      const validTabs = ['import', 'overview', 'trend', 'product', 'customer'];
+      if (!validTabs.includes(tabId)) tabId = 'import';
 
       store.activeTab = tabId;
       localStorage.setItem(STORAGE_KEY_TAB, tabId);
@@ -6417,7 +6459,9 @@ Delivers:
         }
       });
 
-      if (tabId === 'overview') {
+      if (tabId === 'import') {
+        renderSummaryTable();
+      } else if (tabId === 'overview') {
         renderOverviewPage();
       } else if (tabId === 'trend') {
         renderTrendPage();
@@ -6516,7 +6560,7 @@ Delivers:
           : `${(res.rowsRead || 0).toLocaleString()} / <span style="color: var(--text-muted);">${(res.rowsSkipped || 0).toLocaleString()}</span>`;
 
         const statusPill = isUnrec
-          ? `<span style="color: var(--warning-text); font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">⚠ Unrecognized file — skipped</span>`
+          ? `<span style="color: var(--warning-text); font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">⚠ ${res.errorMsg ? sanitizeText('Read error: ' + res.errorMsg) : 'Unrecognized file — skipped'}</span>`
           : `<span style="color: var(--success); font-weight: 600;">✓ Ingested</span>`;
 
         return `
@@ -6574,6 +6618,7 @@ Delivers:
             encoding: '-',
             format: (file.name.split('.').pop() || 'unknown').toLowerCase(),
             reportType: 'unrecognized',
+            errorMsg: (err && err.message) ? err.message : 'unknown error',
             newAdded: 0,
             duplicatesSkipped: 0,
             rowsRead: 0,
@@ -6656,8 +6701,9 @@ Delivers:
 
     /* ================= AUTH =================== */
     function checkAuth() {
-      const isLoggedIn = localStorage.getItem(STORAGE_KEY_AUTH) === 'true';
-      const userName = localStorage.getItem(STORAGE_KEY_USER) || '';
+      const authStore = [sessionStorage, localStorage].find(st => st.getItem(STORAGE_KEY_AUTH) === 'true');
+      const isLoggedIn = !!authStore;
+      const userName = authStore ? (authStore.getItem(STORAGE_KEY_USER) || '') : '';
 
       const authView = document.getElementById('auth-view');
       const dashboardView = document.getElementById('dashboard-view');
@@ -6669,7 +6715,7 @@ Delivers:
         dashboardView.classList.remove('hidden');
         if (displayUser) displayUser.textContent = userName;
 
-        const savedTab = localStorage.getItem(STORAGE_KEY_TAB) || 'overview';
+        const savedTab = localStorage.getItem(STORAGE_KEY_TAB) || 'import';
         switchTab(savedTab);
       } else {
         store.user = null;
@@ -6680,19 +6726,41 @@ Delivers:
 
     function handleLoginSubmit(event) {
       event.preventDefault();
-      const input = document.getElementById('login-username');
-      const name = (input ? input.value : '').trim();
-
+      const name = ((document.getElementById('login-username') || {}).value || '').trim();
+      const pw = (document.getElementById('login-password') || {}).value || '';
+      const remember = !!(document.getElementById('login-remember') || {}).checked;
+      const err = document.getElementById('login-error');
+      const now = Date.now();
+      const lockUntil = Number(sessionStorage.getItem('sid_lock_until') || 0);
+      if (now < lockUntil) {
+        err.textContent = `Too many attempts. Try again in ${Math.ceil((lockUntil - now) / 1000)}s.`;
+        return;
+      }
       if (!name) return;
-
-      localStorage.setItem(STORAGE_KEY_AUTH, 'true');
-      localStorage.setItem(STORAGE_KEY_USER, name);
+      if (sha256Hex(AUTH_SALT + pw) !== AUTH_PASSWORD_HASH) {
+        const fails = Number(sessionStorage.getItem('sid_fails') || 0) + 1;
+        sessionStorage.setItem('sid_fails', String(fails));
+        if (fails >= 5) {
+          sessionStorage.setItem('sid_lock_until', String(now + 30000));
+          sessionStorage.setItem('sid_fails', '0');
+        }
+        err.textContent = 'Incorrect password.';
+        return;
+      }
+      err.textContent = '';
+      sessionStorage.removeItem('sid_fails');
+      const st = remember ? localStorage : sessionStorage;
+      st.setItem(STORAGE_KEY_AUTH, 'true');
+      st.setItem(STORAGE_KEY_USER, name);
+      document.getElementById('login-password').value = '';
       checkAuth();
     }
 
     function handleLogout() {
-      localStorage.removeItem(STORAGE_KEY_AUTH);
-      localStorage.removeItem(STORAGE_KEY_USER);
+      [localStorage, sessionStorage].forEach(st => {
+        st.removeItem(STORAGE_KEY_AUTH);
+        st.removeItem(STORAGE_KEY_USER);
+      });
       checkAuth();
     }
 
@@ -7266,7 +7334,7 @@ Delivers:
 
       assert(
         'M8 Multi-File Ingestion & Safety: Ingests mixed valid files, safely skips unrecognized file, and populates all analytics without crash',
-        unrecInBatch !== null &&
+        !!unrecInBatch &&
         unrecInBatch.reportType === 'unrecognized' &&
         unrecInBatch.newAdded === 0 &&
         hasAddedTx &&
@@ -7285,8 +7353,8 @@ Delivers:
       store.seenTxIds = snapSeenTx;
       store.seenItemKeys = snapSeenItems;
       store.seenDepositIds = snapSeenDeps;
-      store.metrics.filesUploaded = snapFiles;
       Object.assign(store.metrics, snapMetrics);
+      store.metrics.filesUploaded = snapFiles;
 
       const allPassed = results.every(r => r.passed);
       console.log(`=== M8 runChecks() finished: ${results.filter(r => r.passed).length}/${results.length} PASSED ===`);
