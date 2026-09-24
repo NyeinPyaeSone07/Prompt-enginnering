@@ -1,16 +1,18 @@
 <!--
 ================================================================================
 Sales Intelligence Dashboard (Track A)
-Milestone: M2 - Normalize + Merge + De-duplicate
+Milestone: M3 - Core Calculations
 Delivers:
-  - NORMALIZE_MERGE: Unified Transaction, LineItem, Deposit models per schema.md §5
-  - Category extraction via "^(\d{2})-(\d{3})\s*-\s*(.*)$" pattern (fallback "NA")
-  - Salesperson code whitespace trimming (e.g. " 3" -> "3")
-  - De-duplication by doc_no (Tx), (transactionId, seq) (LineItems), docNo (Deposits)
-  - Combined Ingestion Summary across all uploaded files (Net Revenue, Tx count,
-    Line Items, Deposits, and Duplicates Skipped)
-  - Preserves first-seen record on collision; duplicates never double-counted
-  - runChecks() expanded with M2 normalization & de-duplication tests
+  - Pure calculation functions per schema.md §7 (calendar) & §8 (formulas):
+      * isWorkingDay(date): Mon-Sat = true, Sun = false
+      * countWorkingDays(startDate, endDate): inclusive calendar counter
+      * runRate(salesToDate, workingDaysElapsed, workingDaysInMonth)
+      * seasonalIndex(monthNumber, allMonthlyTotals): §8 definition
+      * movingAverage3(monthlyTotalsInOrder): smoothed average & series
+      * forecastRange(runRate, seasonalIndex, history): low, base, high, confidence
+      * mape(forecastArray, actualArray): percentage error
+  - Zero DOM access in calculation modules (pure mathematical functions)
+  - Extended runChecks() verifying March 2026 pace, zero sales, and confidence gates
 ================================================================================
 -->
 <!doctype html>
@@ -883,7 +885,7 @@ Delivers:
 
     <!-- Footer -->
     <footer class="app-footer">
-      <span>Sales Intelligence Dashboard (Track A) • Milestone M2: Normalize, Merge &amp; De-duplicate</span>
+      <span>Sales Intelligence Dashboard (Track A) • Milestone M3: Core Calculations</span>
       <span id="footer-check-info">Self-Checks: All green</span>
     </footer>
   </div>
@@ -1708,7 +1710,292 @@ Delivers:
     }
 
     /* ================= CALC =================== */
-    // Pure calculation functions will be implemented in Milestone M3.
+    /**
+     * Pure calculation functions for Sales Intelligence Dashboard (Track A)
+     * Meets AGENTS.md rule 9: pure mathematical functions with zero DOM access.
+     */
+
+    /**
+     * Checks whether a given date is a working day (Mon-Sat = true, Sun = false).
+     * @param {string|Date} date - ISO date string ('YYYY-MM-DD') or Date instance
+     * @returns {boolean}
+     */
+    function isWorkingDay(date) {
+      if (!date) return false;
+      let d;
+      if (typeof date === 'string') {
+        const clean = date.split('T')[0].trim();
+        const parts = clean.split('-');
+        if (parts.length === 3) {
+          d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        } else {
+          d = new Date(date);
+        }
+      } else if (date instanceof Date) {
+        d = date;
+      } else {
+        d = new Date(date);
+      }
+
+      if (isNaN(d.getTime())) return false;
+      // getDay(): 0 = Sun, 1 = Mon, ..., 6 = Sat
+      return d.getDay() !== 0;
+    }
+
+    /**
+     * Counts working days (Mon-Sat) between startDate and endDate inclusive.
+     * @param {string|Date} startDate - Start date ('YYYY-MM-DD' or Date)
+     * @param {string|Date} endDate - End date ('YYYY-MM-DD' or Date)
+     * @returns {number}
+     */
+    function countWorkingDays(startDate, endDate) {
+      if (!startDate || !endDate) return 0;
+      let s, e;
+      if (typeof startDate === 'string') {
+        const parts = startDate.split('T')[0].trim().split('-');
+        s = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+      } else {
+        s = new Date(startDate);
+      }
+      if (typeof endDate === 'string') {
+        const parts = endDate.split('T')[0].trim().split('-');
+        e = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+      } else {
+        e = new Date(endDate);
+      }
+
+      if (isNaN(s.getTime()) || isNaN(e.getTime()) || s > e) return 0;
+
+      let count = 0;
+      const cur = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+      const last = new Date(e.getFullYear(), e.getMonth(), e.getDate());
+
+      while (cur <= last) {
+        if (isWorkingDay(cur)) {
+          count++;
+        }
+        cur.setDate(cur.getDate() + 1);
+      }
+      return count;
+    }
+
+    /**
+     * Calculates monthly run-rate forecast based on sales pace across working days.
+     * Formula: (salesToDate / workingDaysElapsed) * workingDaysInMonth
+     * @param {number} salesToDate 
+     * @param {number} workingDaysElapsed 
+     * @param {number} workingDaysInMonth 
+     * @returns {number}
+     */
+    function runRate(salesToDate, workingDaysElapsed, workingDaysInMonth) {
+      const sales = Number(salesToDate) || 0;
+      const elapsed = Number(workingDaysElapsed) || 0;
+      const totalDays = Number(workingDaysInMonth) || 0;
+
+      if (sales === 0 || elapsed <= 0 || totalDays <= 0) {
+        return 0;
+      }
+      const rate = (sales / elapsed) * totalDays;
+      return Number(rate.toFixed(2));
+    }
+
+    /**
+     * Calculates seasonal index for a given calendar month (1..12).
+     * Defined as: (Average sales for target month) / (Overall average monthly sales)
+     * Defaults to 1.0 if insufficient historical data or overall average is zero.
+     * @param {number} monthNumber - Calendar month (1 to 12)
+     * @param {Array|Object} allMonthlyTotals - Array of monthly totals or objects
+     * @returns {number}
+     */
+    function seasonalIndex(monthNumber, allMonthlyTotals) {
+      const m = parseInt(monthNumber, 10);
+      if (isNaN(m) || m < 1 || m > 12) return 1.0;
+      if (!allMonthlyTotals) return 1.0;
+
+      let monthTotals = [];
+      let allTotals = [];
+
+      if (Array.isArray(allMonthlyTotals)) {
+        if (allMonthlyTotals.length === 0) return 1.0;
+
+        if (allMonthlyTotals.length === 12 && allMonthlyTotals.every(v => typeof v === 'number')) {
+          allTotals = allMonthlyTotals.map(v => Number(v) || 0);
+          const val = allTotals[m - 1];
+          if (val != null) monthTotals.push(val);
+        } else {
+          for (let i = 0; i < allMonthlyTotals.length; i++) {
+            const item = allMonthlyTotals[i];
+            if (typeof item === 'number') {
+              allTotals.push(item);
+              if (i + 1 === m) monthTotals.push(item);
+            } else if (item && typeof item === 'object') {
+              const itemTotal = Number(item.total || item.amount || item.grandTotal || 0);
+              let itemMonth = null;
+              if (item.month != null) {
+                itemMonth = parseInt(item.month, 10);
+              } else if (item.date) {
+                const parts = String(item.date).split('-');
+                if (parts.length >= 2) itemMonth = parseInt(parts[1], 10);
+              }
+              allTotals.push(itemTotal);
+              if (itemMonth === m) {
+                monthTotals.push(itemTotal);
+              }
+            }
+          }
+        }
+      } else if (typeof allMonthlyTotals === 'object') {
+        for (const key of Object.keys(allMonthlyTotals)) {
+          const val = Number(allMonthlyTotals[key]) || 0;
+          allTotals.push(val);
+          let keyMonth = parseInt(key, 10);
+          if (isNaN(keyMonth) && key.includes('-')) {
+            keyMonth = parseInt(key.split('-')[1], 10);
+          }
+          if (keyMonth === m) {
+            monthTotals.push(val);
+          }
+        }
+      }
+
+      if (allTotals.length === 0) return 1.0;
+      const overallAvg = allTotals.reduce((a, b) => a + b, 0) / allTotals.length;
+      if (overallAvg <= 0) return 1.0;
+
+      if (monthTotals.length === 0) return 1.0;
+      const monthAvg = monthTotals.reduce((a, b) => a + b, 0) / monthTotals.length;
+
+      return Number((monthAvg / overallAvg).toFixed(4));
+    }
+
+    /**
+     * Calculates 3-month moving average from chronological monthly totals.
+     * Returns latest 3-month moving average as number by default.
+     * If options.series is true (or via movingAverage3.series), returns array.
+     * @param {Array<number|Object>} monthlyTotalsInOrder 
+     * @param {Object} [options] 
+     * @returns {number|Array<number|null>}
+     */
+    function movingAverage3(monthlyTotalsInOrder, options) {
+      if (!Array.isArray(monthlyTotalsInOrder) || monthlyTotalsInOrder.length === 0) {
+        return options && options.series ? [] : 0;
+      }
+
+      const vals = monthlyTotalsInOrder.map(v => {
+        if (typeof v === 'number') return v;
+        return parseNum(v?.total || v?.amount || v?.grandTotal || v);
+      });
+
+      if (options && options.series) {
+        return vals.map((val, idx, arr) => {
+          if (idx < 2) return null;
+          const sum3 = arr[idx] + arr[idx - 1] + arr[idx - 2];
+          return Number((sum3 / 3).toFixed(2));
+        });
+      }
+
+      const slice = vals.slice(-3);
+      const sum = slice.reduce((acc, curr) => acc + curr, 0);
+      return Number((sum / slice.length).toFixed(2));
+    }
+
+    movingAverage3.series = function(monthlyTotalsInOrder) {
+      return movingAverage3(monthlyTotalsInOrder, { series: true });
+    };
+
+    /**
+     * Generates { low, base, high, confidence } forecast range.
+     * Handles zero sales gracefully without throwing (base = 0).
+     * Includes confidence: "too early, low confidence" when workingDaysElapsed < 5.
+     * @param {number} runRateVal 
+     * @param {number} [seasonalIdx] 
+     * @param {Object|Array|number} [history] 
+     * @param {number} [workingDaysElapsedOpt]
+     * @returns {{ low: number, base: number, high: number, confidence: string }}
+     */
+    function forecastRange(runRateVal, seasonalIdx, history, workingDaysElapsedOpt) {
+      const rate = Number(runRateVal) || 0;
+      const sIdx = (typeof seasonalIdx === 'number' && !isNaN(seasonalIdx) && seasonalIdx > 0) ? seasonalIdx : 1.0;
+
+      let elapsed = null;
+      if (typeof workingDaysElapsedOpt === 'number') {
+        elapsed = workingDaysElapsedOpt;
+      } else if (typeof history === 'number') {
+        elapsed = history;
+      } else if (history && typeof history === 'object') {
+        if (typeof history.workingDaysElapsed === 'number') {
+          elapsed = history.workingDaysElapsed;
+        } else if (typeof history.daysElapsed === 'number') {
+          elapsed = history.daysElapsed;
+        }
+      }
+
+      let confidence = 'normal';
+      if (elapsed !== null && elapsed < 5) {
+        confidence = 'too early, low confidence';
+      } else if (elapsed !== null && elapsed < 12) {
+        confidence = 'preliminary, moderate confidence';
+      } else if (elapsed !== null) {
+        confidence = 'stable, high confidence';
+      }
+
+      if (rate === 0) {
+        return {
+          low: 0,
+          base: 0,
+          high: 0,
+          confidence: (elapsed !== null && elapsed < 5) ? 'too early, low confidence' : 'no sales to date'
+        };
+      }
+
+      const base = Number((rate * sIdx).toFixed(2));
+      const margin = (elapsed !== null && elapsed < 5) ? 0.15 : (elapsed !== null && elapsed < 12 ? 0.08 : 0.05);
+      const low = Number((base * (1 - margin)).toFixed(2));
+      const high = Number((base * (1 + margin)).toFixed(2));
+
+      return {
+        low,
+        base,
+        high,
+        confidence
+      };
+    }
+
+    /**
+     * Computes Mean Absolute Percentage Error (MAPE) between forecast and actual arrays.
+     * Returns error percentage as a number (e.g. 3.69).
+     * @param {Array<number>|number} forecastArray 
+     * @param {Array<number>|number} actualArray 
+     * @returns {number}
+     */
+    function mape(forecastArray, actualArray) {
+      const fArr = Array.isArray(forecastArray) ? forecastArray : [forecastArray];
+      const aArr = Array.isArray(actualArray) ? actualArray : [actualArray];
+
+      const count = Math.min(fArr.length, aArr.length);
+      if (count === 0) return 0;
+
+      let totalPctError = 0;
+      let validCount = 0;
+
+      for (let i = 0; i < count; i++) {
+        const forecast = Number(fArr[i]);
+        const actual = Number(aArr[i]);
+
+        if (isNaN(forecast) || isNaN(actual)) continue;
+        if (actual === 0) {
+          if (forecast === 0) validCount++;
+          continue;
+        }
+
+        const err = Math.abs((actual - forecast) / actual) * 100;
+        totalPctError += err;
+        validCount++;
+      }
+
+      if (validCount === 0) return 0;
+      return Number((totalPctError / validCount).toFixed(2));
+    }
 
     /* ================= CHARTS ================= */
     // Chart rendering functions will be implemented in Milestones M4 through M7.
@@ -2164,8 +2451,106 @@ Delivers:
       // Clean store back to empty state for user session
       resetStore();
 
+      // --- Milestone M3 Self-Tests (Pure Core Calculations) ---
+      // Test Case 9: Calendar functions (isWorkingDay & countWorkingDays)
+      const sunWorking = isWorkingDay('2026-03-01'); // Sunday
+      const monWorking = isWorkingDay('2026-03-02'); // Monday
+      const satWorking = isWorkingDay('2026-03-07'); // Saturday
+      assert(
+        'M3 Calendar: isWorkingDay correctly identifies Mon-Sat as true, Sun as false',
+        sunWorking === false && monWorking === true && satWorking === true,
+        { sun: sunWorking, mon: monWorking, sat: satWorking }
+      );
+
+      const marchElapsed15 = countWorkingDays('2026-03-01', '2026-03-15');
+      const marchTotalDays = countWorkingDays('2026-03-01', '2026-03-31');
+      assert(
+        'M3 Calendar: countWorkingDays inclusive (1-15 Mar 2026 = 12 elapsed days, full Mar 2026 = 26 days)',
+        marchElapsed15 === 12 && marchTotalDays === 26,
+        { marchElapsed15, marchTotalDays }
+      );
+
+      // Test Case 10: Case 1 - March 2026 cutoff 15 March run-rate pace and error%
+      const test1SalesToDate = 2670583.58;
+      const test1Elapsed = 12;
+      const test1TotalDays = 26;
+      const expectedRunRateVal = 5786264.42;
+      const actualMarchTotal = 5580325.23;
+
+      const calcRate = runRate(test1SalesToDate, test1Elapsed, test1TotalDays);
+      const rateDiff = Math.abs(calcRate - expectedRunRateVal);
+      const test1ErrorPct = mape([calcRate], [actualMarchTotal]);
+
+      console.log(`[runChecks] M3 March 2026 Pace: salesToDate = ${test1SalesToDate.toLocaleString()}, runRate = ${calcRate.toLocaleString()}, actual = ${actualMarchTotal.toLocaleString()}, error% = ${test1ErrorPct}%`);
+
+      assert(
+        'M3 Case 1: March 2026 cut off at 15 March -> runRate equals 5,786,264.42 (±1 baht rounding)',
+        rateDiff <= 1.0,
+        { calcRate, expected: expectedRunRateVal, diff: rateDiff }
+      );
+
+      assert(
+        'M3 Case 1 (error%): Error against actual March total 5,580,325.23 is ~3.69%',
+        Math.abs(test1ErrorPct - 3.69) <= 0.1,
+        { test1ErrorPct, expected: 3.69 }
+      );
+
+      // Test Case 11: Case 2 - Month with zero sales so far -> base forecast is 0, function does not throw
+      const zeroRate = runRate(0, 10, 26);
+      let zeroThrown = false;
+      let zeroRange = null;
+      try {
+        zeroRange = forecastRange(zeroRate, 1.0, { workingDaysElapsed: 10 });
+      } catch (err) {
+        zeroThrown = true;
+      }
+      assert(
+        'M3 Case 2: Month with zero sales so far -> base forecast is 0, function does not throw',
+        !zeroThrown && zeroRate === 0 && zeroRange && zeroRange.base === 0 && zeroRange.low === 0 && zeroRange.high === 0,
+        zeroRange
+      );
+
+      // Test Case 12: Case 3 - workingDaysElapsed < 5 -> confidence: "too early, low confidence"
+      const earlyRange = forecastRange(5000000, 1.0, { workingDaysElapsed: 3 });
+      assert(
+        'M3 Case 3: workingDaysElapsed < 5 -> forecastRange includes confidence "too early, low confidence"',
+        earlyRange && earlyRange.confidence && earlyRange.confidence.includes('too early, low confidence'),
+        earlyRange
+      );
+
+      // Test Case 13: Moving Average (3-month moving average calculation and series)
+      const maSingle = movingAverage3([1000000, 2000000, 3000000]);
+      const maSeries = movingAverage3.series([1000000, 2000000, 3000000, 4000000]);
+      assert(
+        'M3 Moving Average: movingAverage3([1M, 2M, 3M]) = 2,000,000 and series starts with [null, null, ...]',
+        maSingle === 2000000 && maSeries[0] === null && maSeries[1] === null && maSeries[2] === 2000000 && maSeries[3] === 3000000,
+        { maSingle, maSeries }
+      );
+
+      // Test Case 14: Seasonal Index (§8 definition: monthAvg / overallAvg)
+      const mockMonthly = [100, 100, 150, 50]; // mean = 100, month 3 = 150
+      const sIdx3 = seasonalIndex(3, mockMonthly);
+      assert(
+        'M3 Seasonal Index: month 3 with 150 against overall 100 avg has seasonalIndex = 1.50',
+        sIdx3 === 1.5,
+        { sIdx3, expected: 1.5 }
+      );
+
+      // Test Case 15: Real store check if transactions already loaded
+      const storeMarchTx = store.transactions.filter(t => t.date && t.date.startsWith('2026-03'));
+      if (storeMarchTx.length > 0) {
+        const storeSalesTo15 = storeMarchTx
+          .filter(t => t.date <= '2026-03-15')
+          .reduce((sum, t) => sum + (t.grandTotal || 0), 0);
+        const storeMarchTotal = storeMarchTx
+          .reduce((sum, t) => sum + (t.grandTotal || 0), 0);
+        const storeCalcRate = runRate(storeSalesTo15, 12, 26);
+        const storeErr = mape([storeCalcRate], [storeMarchTotal]);
+        console.log(`[runChecks] Live Loaded Store March 2026: to15th=${storeSalesTo15.toFixed(2)}, total=${storeMarchTotal.toFixed(2)}, rate=${storeCalcRate.toFixed(2)}, error=${storeErr}%`);
+      }
+
       const allPassed = results.every(r => r.passed);
-      console.log(`=== M2 runChecks() finished: ${results.filter(r => r.passed).length}/${results.length} PASSED ===`);
+      console.log(`=== M3 runChecks() finished: ${results.filter(r => r.passed).length}/${results.length} PASSED ===`);
       console.groupEnd();
 
       // Update UI indicator
