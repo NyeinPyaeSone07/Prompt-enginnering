@@ -1,21 +1,19 @@
 <!--
 ================================================================================
 Sales Intelligence Dashboard (Track A)
-Milestone: M4 - Overview Page
+Milestone: M5 - Trend & Forecast Page
 Delivers:
-  - Month selector dropdown of all calendar months in data (defaults to latest)
-  - KPI Cards: Month-to-date sales (working days pace & cash/credit split),
-               Forecast range (low / base / high with confidence signal),
-               Direction signal badge (Ahead / On Track / Behind vs YoY or prior month),
-               MAPE accuracy tracking (from closed months with later month data)
-  - Chart 1: Daily cumulative sales (line) + straight pace-to-target reference line
-             (Target chosen = Forecast Base, with prior month fallback)
-  - Chart 2: Monthly revenue bar chart for every month in loaded data with
-             selected month's forecast base remainder highlighted
-  - Table: Top 5 Categories Up and Top 5 Down vs prior month by ฿ change
-           (using schema.md §6 lookup for authentic Thai category names)
-  - Friendly empty state when zero files are uploaded
-  - Uses M3 CALC pure math functions and M2 STORE models directly (no ad-hoc math)
+  - Shared month selector across Overview and Trend & Forecast pages
+  - Chart 1: Monthly revenue line with 3-month moving average (MA-3) overlaid;
+             graceful notification if <12 months data for YoY prior year comparison
+  - Chart 2: Seasonal index bar chart, one bar per calendar month present in data
+  - Chart 3: Forecast band (Low / Base / High) for selected month drawn against
+             actual historical bars
+  - Table 4: Accuracy log table for closed months (15th cutoff pace vs final actual,
+             error %, running MAPE), persisted to localStorage across browser sessions
+  - Backtest mode: Selecting an older month (or toggling backtest) recomputes 1-4
+             at 15th-day cutoff to visibly test forecast accuracy against closed months
+  - Extended runChecks() verifying M5 calculations, backtesting, and localStorage
 ================================================================================
 -->
 <!doctype html>
@@ -985,6 +983,116 @@ Delivers:
       color: var(--text-muted);
     }
 
+    /* -------------------------------------------------------------
+       MILESTONE M5: TREND & FORECAST PAGE STYLES
+       ------------------------------------------------------------- */
+    .trend-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      width: 100%;
+    }
+
+    .trend-empty-state {
+      background: var(--bg-surface);
+      border: 2px dashed var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 64px 24px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+    }
+
+    .trend-content {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      width: 100%;
+    }
+
+    .backtest-banner {
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      border-radius: var(--radius-md);
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      color: #fbbf24;
+      font-size: 13px;
+    }
+
+    .backtest-banner-title {
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+    }
+
+    .backtest-banner-detail {
+      color: var(--text-primary);
+      font-size: 12px;
+    }
+
+    .backtest-toggle-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg-canvas);
+      padding: 8px 12px;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .backtest-toggle-wrapper input[type="checkbox"] {
+      cursor: pointer;
+      accent-color: var(--accent);
+      width: 15px;
+      height: 15px;
+    }
+
+    .backtest-toggle-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .accuracy-grade-pill {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      letter-spacing: 0.03em;
+    }
+
+    .grade-high {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .grade-moderate {
+      background: rgba(59, 130, 246, 0.15);
+      color: #60a5fa;
+      border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+
+    .grade-variance {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
     /* Footer */
     .app-footer {
       border-top: 1px solid var(--border-subtle);
@@ -1393,14 +1501,196 @@ Delivers:
         </div>
       </section>
 
-      <!-- Page 2: Trend & Forecast Panel Shell -->
-      <section id="panel-trend" class="page-panel hidden">
-        <span class="page-panel-badge">Milestone M5 Preview</span>
-        <h2 class="page-panel-title">Sales Trend &amp; Forecast</h2>
-        <p class="page-panel-desc">
-          This panel will display the monthly trend with a 3-month moving average, calendar seasonal indices,
-          low/base/high forecast bands, and the persistent accuracy log (MAPE) once M5 is implemented.
-        </p>
+      <!-- Page 2: Trend & Forecast Panel (Milestone M5) -->
+      <section id="panel-trend" class="trend-panel hidden">
+        <!-- Friendly Empty State -->
+        <div id="trend-empty-state" class="trend-empty-state">
+          <div class="overview-empty-icon">📈</div>
+          <h2 class="overview-empty-title">Upload your sales reports to see trend &amp; forecast</h2>
+          <p class="overview-empty-desc">
+            Drag and drop sales reports into the dropzone above to view 3-month moving average trends,
+            calendar seasonal indices, forecast bands with confidence intervals, and backtesting accuracy logs.
+          </p>
+          <button type="button" class="btn-primary" onclick="triggerFileInput()" style="display: inline-flex; align-items: center; gap: 8px;">
+            <span>📁 Upload Sales Reports</span>
+          </button>
+        </div>
+
+        <!-- Populated Trend Dashboard Content -->
+        <div id="trend-content" class="trend-content hidden">
+          <!-- Header Bar with Month Selector and Backtest Toggle -->
+          <div class="overview-header-bar">
+            <div>
+              <span class="overview-page-badge">Analysis &amp; Projection</span>
+              <h1 class="overview-title">Sales Trend &amp; Forecasting Engine</h1>
+              <p class="overview-subtitle">
+                3-Month moving average, calendar seasonal indices, forecast bands, and persistent accuracy log (MAPE)
+              </p>
+            </div>
+
+            <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 10px;">
+              <!-- Backtest Mode Toggle -->
+              <label class="backtest-toggle-wrapper" title="Cut off data at the 15th day of the selected month to test forecast accuracy against closed actual totals">
+                <input type="checkbox" id="trend-backtest-toggle" onchange="handleBacktestToggleChange(this.checked)" />
+                <span class="backtest-toggle-label">Backtest (15th Cutoff)</span>
+              </label>
+
+              <!-- Shared Month Selector -->
+              <div class="month-selector-wrapper">
+                <label for="trend-month-select" class="month-selector-label">Target Month:</label>
+                <select id="trend-month-select" class="month-selector-dropdown" onchange="handleTrendMonthChange(this.value)">
+                  <!-- Dynamically populated -->
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Backtest Mode Banner (visible when backtest is active) -->
+          <div id="trend-backtest-banner" class="backtest-banner hidden">
+            <div>
+              <div class="backtest-banner-title">
+                <span>⚡ Backtest Mode Active</span>
+                <span id="trend-backtest-badge" class="cat-count-pill" style="background: rgba(245, 158, 11, 0.3);">Cutoff: 15th Day</span>
+              </div>
+              <div id="trend-backtest-desc" class="backtest-banner-detail" style="margin-top: 4px;">
+                Simulating forecast as if data only existed up to the 15th of the month.
+              </div>
+            </div>
+            <div id="trend-backtest-stats" style="font-family: ui-monospace, monospace; font-size: 13px; font-weight: 600;">
+              <!-- Run-rate vs Actual error% -->
+            </div>
+          </div>
+
+          <!-- KPI Summary Row for Selected Month -->
+          <div class="overview-kpi-grid">
+            <div class="overview-kpi-card">
+              <div class="kpi-card-header">
+                <span class="kpi-card-label" id="trend-kpi-sales-label">Month-to-Date (Pace)</span>
+                <span id="trend-kpi-pace-badge" class="kpi-card-tag">Pace</span>
+              </div>
+              <div id="trend-kpi-sales-val" class="kpi-card-value">฿0</div>
+              <div id="trend-kpi-sales-sub" class="kpi-card-subtext">0 / 0 working days elapsed</div>
+              <div id="trend-kpi-sales-detail" class="kpi-card-detail">Standard working day pace (Mon–Sat)</div>
+            </div>
+
+            <div class="overview-kpi-card highlight-accent">
+              <div class="kpi-card-header">
+                <span class="kpi-card-label">Forecast Range</span>
+                <span id="trend-kpi-conf-badge" class="badge-confidence">Base Forecast</span>
+              </div>
+              <div id="trend-kpi-base-val" class="kpi-card-value" style="color: #60a5fa;">฿0</div>
+              <div id="trend-kpi-range-sub" class="kpi-card-subtext">Low: ฿0 | High: ฿0</div>
+              <div id="trend-kpi-method-detail" class="kpi-card-detail">Pace × Seasonal Index</div>
+            </div>
+
+            <div class="overview-kpi-card">
+              <div class="kpi-card-header">
+                <span class="kpi-card-label">Actual Final Sales</span>
+                <span id="trend-kpi-actual-badge" class="kpi-card-tag">Closed Total</span>
+              </div>
+              <div id="trend-kpi-actual-val" class="kpi-card-value">฿0</div>
+              <div id="trend-kpi-actual-sub" class="kpi-card-subtext">From ingested report totals</div>
+              <div id="trend-kpi-actual-detail" class="kpi-card-detail">Ground truth comparison</div>
+            </div>
+
+            <div class="overview-kpi-card">
+              <div class="kpi-card-header">
+                <span class="kpi-card-label">Running MAPE Accuracy</span>
+                <span class="kpi-card-tag">Historical Log</span>
+              </div>
+              <div id="trend-kpi-mape-val" class="kpi-card-value">N/A</div>
+              <div id="trend-kpi-mape-sub" class="kpi-card-subtext">Average absolute % error</div>
+              <div id="trend-kpi-mape-detail" class="kpi-card-detail">Persisted in localStorage across sessions</div>
+            </div>
+          </div>
+
+          <!-- Charts Row 1: Trend Line & Seasonal Index -->
+          <div class="overview-charts-grid">
+            <!-- Chart 1: Monthly Revenue & 3-Month Moving Average -->
+            <div class="overview-chart-card">
+              <div class="chart-card-header">
+                <div>
+                  <h3 class="chart-card-title">Monthly Revenue &amp; 3-Month Moving Average</h3>
+                  <div id="trend-chart-1-subtitle" class="chart-card-subtitle">
+                    Monthly sales trend overlaid with 3-month smoothed moving average (MA-3)
+                  </div>
+                </div>
+                <span id="trend-chart-1-badge" class="brand-tag">3MA Trend</span>
+              </div>
+              <div class="chart-canvas-container">
+                <canvas id="chart-trend-revenue-ma"></canvas>
+              </div>
+            </div>
+
+            <!-- Chart 2: Seasonal Index Bar Chart -->
+            <div class="overview-chart-card">
+              <div class="chart-card-header">
+                <div>
+                  <h3 class="chart-card-title">Calendar Seasonal Index (Monthly Multipliers)</h3>
+                  <div class="chart-card-subtitle">
+                    Average sales for calendar month ÷ overall average monthly sales (Baseline = 1.00)
+                  </div>
+                </div>
+                <span id="trend-chart-2-badge" class="brand-tag">Seasonality</span>
+              </div>
+              <div class="chart-canvas-container">
+                <canvas id="chart-trend-seasonal-index"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- Chart 3: Forecast Band vs Actual Historical Bars -->
+          <div class="overview-chart-card">
+            <div class="chart-card-header">
+              <div>
+                <h3 class="chart-card-title">Historical Sales &amp; Target Month Forecast Band</h3>
+                <div id="trend-chart-3-subtitle" class="chart-card-subtitle">
+                  Actual revenue across historical months with Low / Base / High forecast band for selected target month
+                </div>
+              </div>
+              <span id="trend-chart-3-badge" class="brand-tag">Forecast Band</span>
+            </div>
+            <div class="chart-canvas-container" style="height: 300px;">
+              <canvas id="chart-trend-forecast-band"></canvas>
+            </div>
+          </div>
+
+          <!-- Card 4: Accuracy Log Table (Persisted to localStorage) -->
+          <div class="overview-table-card">
+            <div class="table-card-header">
+              <div>
+                <h3 class="chart-card-title">Forecast Accuracy Log &amp; Running MAPE</h3>
+                <div class="chart-card-subtitle">
+                  Tracks mid-month run-rate forecast (15th cutoff) vs. actual closed revenue for every month with completed ground truth
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="brand-tag">Saved to LocalStorage</span>
+                <button type="button" class="btn-secondary" onclick="clearAccuracyLog()" style="font-size: 11px; padding: 4px 8px;">Reset Log</button>
+              </div>
+            </div>
+
+            <div class="table-container">
+              <table class="summary-table">
+                <thead>
+                  <tr>
+                    <th>Month</th>
+                    <th style="text-align: right;">15th Mid-Month Pace</th>
+                    <th style="text-align: right;">Forecast Base (฿)</th>
+                    <th style="text-align: right;">Final Actual (฿)</th>
+                    <th style="text-align: right;">Baht Variance (฿)</th>
+                    <th style="text-align: right;">Error %</th>
+                    <th style="text-align: right;">Running MAPE</th>
+                    <th style="text-align: center;">Accuracy Grade</th>
+                  </tr>
+                </thead>
+                <tbody id="accuracy-log-table-body">
+                  <!-- Dynamic rows -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- Page 3: Product & Category Panel Shell -->
@@ -1426,7 +1716,7 @@ Delivers:
 
     <!-- Footer -->
     <footer class="app-footer">
-      <span>Sales Intelligence Dashboard (Track A) • Milestone M3: Core Calculations</span>
+      <span>Sales Intelligence Dashboard (Track A) • Milestone M5: Trend &amp; Forecast</span>
       <span id="footer-check-info">Self-Checks: All green</span>
     </footer>
   </div>
@@ -1439,6 +1729,7 @@ Delivers:
     const STORAGE_KEY_AUTH = 'sid_demo_logged_in';
     const STORAGE_KEY_USER = 'sid_demo_user_name';
     const STORAGE_KEY_TAB  = 'sid_active_tab';
+    const STORAGE_KEY_ACCURACY_LOG = 'sid_accuracy_log';
 
     // Report title keywords (schema.md section 0)
     const REPORT_TITLES = {
@@ -2201,6 +2492,9 @@ Delivers:
       user: null,
       activeTab: 'overview',
       overviewSelectedMonth: null,
+      selectedMonth: null,
+      backtestMode: false,
+      backtestExplicit: false,
       // Unified canonical dataset across all files
       transactions: [],
       lineItems: [],
@@ -2228,6 +2522,9 @@ Delivers:
 
     function resetStore() {
       store.overviewSelectedMonth = null;
+      store.selectedMonth = null;
+      store.backtestMode = false;
+      store.backtestExplicit = false;
       store.transactions = [];
       store.lineItems = [];
       store.deposits = [];
@@ -2247,6 +2544,7 @@ Delivers:
       store.metrics.maxDate = null;
       store.metrics.filesUploaded = [];
       destroyOverviewCharts();
+      destroyTrendCharts();
     }
 
     function recalculateStoreMetrics() {
@@ -2576,6 +2874,9 @@ Delivers:
     /* ================= CHARTS ================= */
     let overviewPaceChart = null;
     let overviewMonthlyChart = null;
+    let trendRevenueChart = null;
+    let trendSeasonalChart = null;
+    let trendForecastBandChart = null;
 
     function destroyOverviewCharts() {
       if (overviewPaceChart) {
@@ -2585,6 +2886,21 @@ Delivers:
       if (overviewMonthlyChart) {
         overviewMonthlyChart.destroy();
         overviewMonthlyChart = null;
+      }
+    }
+
+    function destroyTrendCharts() {
+      if (trendRevenueChart) {
+        trendRevenueChart.destroy();
+        trendRevenueChart = null;
+      }
+      if (trendSeasonalChart) {
+        trendSeasonalChart.destroy();
+        trendSeasonalChart = null;
+      }
+      if (trendForecastBandChart) {
+        trendForecastBandChart.destroy();
+        trendForecastBandChart = null;
       }
     }
 
@@ -2768,6 +3084,339 @@ Delivers:
                   const val = context.parsed.y;
                   return `${context.dataset.label}: ฿${val != null ? Math.round(val).toLocaleString('en-US') : '-'}`;
                 }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    /**
+     * Chart 1 (M5): Monthly Revenue Line with 3-Month Moving Average Overlaid (and YoY overlay if >=12 months)
+     */
+    function renderTrendRevenueMAChart(data) {
+      if (typeof Chart === 'undefined') return;
+      const canvas = document.getElementById('chart-trend-revenue-ma');
+      if (!canvas) return;
+
+      if (trendRevenueChart) {
+        trendRevenueChart.destroy();
+        trendRevenueChart = null;
+      }
+
+      const labels = data.distinctMonths.map(formatMonthDisplay);
+      const datasets = [
+        {
+          label: 'Monthly Actual Sales (฿)',
+          data: data.monthlyTotalsArray,
+          borderColor: '#3b82f6',
+          backgroundColor: 'rgba(59, 130, 246, 0.12)',
+          fill: true,
+          tension: 0.25,
+          borderWidth: 2.5,
+          pointBackgroundColor: '#3b82f6',
+          pointBorderColor: '#0f172a',
+          pointBorderWidth: 1.5,
+          pointRadius: 4,
+          pointHoverRadius: 6
+        },
+        {
+          label: '3-Month Moving Average (MA-3)',
+          data: data.maSeries,
+          borderColor: '#10b981',
+          backgroundColor: 'transparent',
+          borderDash: [5, 5],
+          tension: 0.25,
+          borderWidth: 2.5,
+          pointBackgroundColor: '#10b981',
+          pointBorderColor: '#0f172a',
+          pointBorderWidth: 1.5,
+          pointRadius: 3,
+          pointHoverRadius: 5
+        }
+      ];
+
+      if (data.has12Months && data.yoySeries) {
+        datasets.push({
+          label: 'Prior Year Actual (YoY Same Months)',
+          data: data.yoySeries,
+          borderColor: '#f59e0b',
+          backgroundColor: 'transparent',
+          borderDash: [3, 3],
+          tension: 0.2,
+          borderWidth: 2,
+          pointBackgroundColor: '#f59e0b',
+          pointRadius: 3
+        });
+      }
+
+      const subtitle = document.getElementById('trend-chart-1-subtitle');
+      const badge = document.getElementById('trend-chart-1-badge');
+      if (subtitle) {
+        subtitle.textContent = data.has12Months
+          ? 'Monthly revenue trend overlaid with 3-month moving average (MA-3) and prior year YoY overlay'
+          : `Monthly revenue trend with 3-month moving average (MA-3). Note: Prior year YoY comparison requires ≥12 months of historical data (current dataset has ${data.distinctMonths.length} month${data.distinctMonths.length === 1 ? '' : 's'}).`;
+      }
+      if (badge) {
+        badge.textContent = data.has12Months ? 'MA-3 + YoY' : `MA-3 (${data.distinctMonths.length} Months)`;
+      }
+
+      const ctx = canvas.getContext('2d');
+      trendRevenueChart = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              display: true,
+              position: 'top',
+              labels: { color: '#cbd5e1', boxWidth: 14, font: { size: 11 } }
+            },
+            tooltip: {
+              backgroundColor: '#0f172a',
+              borderColor: '#334155',
+              borderWidth: 1,
+              titleColor: '#f8fafc',
+              bodyColor: '#cbd5e1',
+              padding: 10,
+              callbacks: {
+                label: function(context) {
+                  const val = context.parsed.y;
+                  return `${context.dataset.label}: ฿${val != null ? Math.round(val).toLocaleString('en-US') : '-'}`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: '#94a3b8', font: { size: 11 } }
+            },
+            y: {
+              beginAtZero: true,
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: {
+                color: '#94a3b8',
+                font: { size: 10 },
+                callback: value => '฿' + Number(value).toLocaleString('en-US', { notation: 'compact' })
+              }
+            }
+          }
+        }
+      });
+    }
+
+    /**
+     * Chart 2 (M5): Calendar Seasonal Index Bar Chart (Baseline = 1.00)
+     */
+    function renderTrendSeasonalChart(data) {
+      if (typeof Chart === 'undefined') return;
+      const canvas = document.getElementById('chart-trend-seasonal-index');
+      if (!canvas) return;
+
+      if (trendSeasonalChart) {
+        trendSeasonalChart.destroy();
+        trendSeasonalChart = null;
+      }
+
+      const labels = data.seasonalBars.map(b => b.label);
+      const values = data.seasonalBars.map(b => b.index);
+      const bgColors = data.seasonalBars.map(b => b.isHigh ? '#3b82f6' : '#64748b');
+
+      const ctx = canvas.getContext('2d');
+      trendSeasonalChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              type: 'line',
+              label: 'Seasonal Baseline (1.00)',
+              data: labels.map(() => 1.0),
+              borderColor: '#f59e0b',
+              borderDash: [5, 5],
+              borderWidth: 2,
+              pointRadius: 0,
+              fill: false
+            },
+            {
+              type: 'bar',
+              label: 'Seasonal Index Multiplier',
+              data: values,
+              backgroundColor: bgColors,
+              borderRadius: 4
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: '#94a3b8', font: { size: 11 } }
+            },
+            y: {
+              beginAtZero: true,
+              suggestedMax: 1.5,
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: {
+                color: '#94a3b8',
+                font: { size: 10 },
+                callback: value => Number(value).toFixed(2) + 'x'
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              display: true,
+              position: 'top',
+              labels: { color: '#cbd5e1', boxWidth: 14, font: { size: 11 } }
+            },
+            tooltip: {
+              backgroundColor: '#0f172a',
+              borderColor: '#334155',
+              borderWidth: 1,
+              titleColor: '#f8fafc',
+              bodyColor: '#cbd5e1',
+              padding: 10,
+              callbacks: {
+                label: function(context) {
+                  const val = context.parsed.y;
+                  if (context.dataset.type === 'line') return 'Baseline: 1.00 (Neutral)';
+                  const diffPct = ((val - 1.0) * 100).toFixed(1);
+                  const sign = val >= 1.0 ? '+' : '';
+                  return `Seasonal Index: ${val.toFixed(2)}x (${sign}${diffPct}% vs annual average)`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    /**
+     * Chart 3 (M5): Forecast Band (Low/Base/High) against Historical Bars
+     */
+    function renderTrendForecastBandChart(data) {
+      if (typeof Chart === 'undefined') return;
+      const canvas = document.getElementById('chart-trend-forecast-band');
+      if (!canvas) return;
+
+      if (trendForecastBandChart) {
+        trendForecastBandChart.destroy();
+        trendForecastBandChart = null;
+      }
+
+      const labels = data.distinctMonths.map(formatMonthDisplay);
+      const selIdx = data.distinctMonths.indexOf(data.selectedMonth);
+      const fObj = data.targetMonthStats.forecast;
+
+      const actualBars = data.monthlyTotalsArray.map((val, idx) => {
+        return val;
+      });
+
+      const bandBars = data.distinctMonths.map((mon, idx) => {
+        if (idx === selIdx && fObj) {
+          return [Math.round(fObj.low), Math.round(fObj.high)];
+        }
+        return null;
+      });
+
+      const basePoints = data.distinctMonths.map((mon, idx) => {
+        if (idx === selIdx && fObj) {
+          return Math.round(fObj.base);
+        }
+        return null;
+      });
+
+      const ctx = canvas.getContext('2d');
+      trendForecastBandChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              type: 'bar',
+              label: 'Actual Historical Revenue (฿)',
+              data: actualBars,
+              backgroundColor: 'rgba(59, 130, 246, 0.65)',
+              borderColor: '#3b82f6',
+              borderWidth: 1,
+              borderRadius: 4,
+              order: 3
+            },
+            {
+              type: 'bar',
+              label: `Forecast Band: Low (${formatLargeTotal(fObj ? fObj.low : 0)}) – High (${formatLargeTotal(fObj ? fObj.high : 0)})`,
+              data: bandBars,
+              backgroundColor: 'rgba(245, 158, 11, 0.35)',
+              borderColor: '#f59e0b',
+              borderWidth: 2,
+              borderRadius: 4,
+              borderSkipped: false,
+              order: 2
+            },
+            {
+              type: 'line',
+              label: `Forecast Base: ${formatLargeTotal(fObj ? fObj.base : 0)}`,
+              data: basePoints,
+              pointStyle: 'circle',
+              pointRadius: 8,
+              pointHoverRadius: 10,
+              pointBackgroundColor: '#fbbf24',
+              pointBorderColor: '#ffffff',
+              pointBorderWidth: 2,
+              showLine: false,
+              order: 1
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: true,
+              position: 'top',
+              labels: { color: '#cbd5e1', boxWidth: 14, font: { size: 11 } }
+            },
+            tooltip: {
+              backgroundColor: '#0f172a',
+              borderColor: '#334155',
+              borderWidth: 1,
+              titleColor: '#f8fafc',
+              bodyColor: '#cbd5e1',
+              padding: 10,
+              callbacks: {
+                label: function(context) {
+                  const val = context.raw;
+                  if (Array.isArray(val)) {
+                    return `Forecast Band: ฿${val[0].toLocaleString()} – ฿${val[1].toLocaleString()}`;
+                  }
+                  if (val != null) {
+                    return `${context.dataset.label}: ฿${Math.round(val).toLocaleString()}`;
+                  }
+                  return '';
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: '#94a3b8', font: { size: 11 } }
+            },
+            y: {
+              beginAtZero: true,
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: {
+                color: '#94a3b8',
+                font: { size: 10 },
+                callback: value => '฿' + Number(value).toLocaleString('en-US', { notation: 'compact' })
               }
             }
           }
@@ -3231,6 +3880,20 @@ Delivers:
     function handleOverviewMonthChange(newMonth) {
       if (!newMonth) return;
       store.overviewSelectedMonth = newMonth;
+      store.selectedMonth = newMonth;
+      const trendSel = document.getElementById('trend-month-select');
+      if (trendSel) trendSel.value = newMonth;
+
+      const distinctMonths = getDistinctMonths();
+      const latestMonth = distinctMonths[distinctMonths.length - 1];
+      if (newMonth < latestMonth) {
+        store.backtestMode = true;
+      } else if (!store.backtestExplicit) {
+        store.backtestMode = false;
+      }
+      const toggle = document.getElementById('trend-backtest-toggle');
+      if (toggle) toggle.checked = store.backtestMode;
+
       renderOverviewPage();
     }
 
@@ -3304,6 +3967,496 @@ Delivers:
         }
       }
     }
+
+    /* ================= TREND & FORECAST PAGE (M5) ================= */
+    function handleTrendMonthChange(newMonth) {
+      if (!newMonth) return;
+      store.selectedMonth = newMonth;
+      store.overviewSelectedMonth = newMonth;
+
+      const overviewSel = document.getElementById('overview-month-select');
+      if (overviewSel) overviewSel.value = newMonth;
+
+      const distinctMonths = getDistinctMonths();
+      const latestMonth = distinctMonths[distinctMonths.length - 1];
+      if (newMonth < latestMonth) {
+        store.backtestMode = true;
+      } else if (!store.backtestExplicit) {
+        store.backtestMode = false;
+      }
+      const toggle = document.getElementById('trend-backtest-toggle');
+      if (toggle) toggle.checked = store.backtestMode;
+
+      renderTrendPage();
+    }
+
+    function handleBacktestToggleChange(checked) {
+      store.backtestMode = Boolean(checked);
+      store.backtestExplicit = true;
+      renderTrendPage();
+    }
+
+    function loadAccuracyLog() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY_ACCURACY_LOG);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveAccuracyLog(log) {
+      try {
+        localStorage.setItem(STORAGE_KEY_ACCURACY_LOG, JSON.stringify(log));
+      } catch (e) {
+        console.warn('Unable to persist accuracy log to localStorage', e);
+      }
+    }
+
+    function clearAccuracyLog() {
+      localStorage.removeItem(STORAGE_KEY_ACCURACY_LOG);
+      renderTrendPage();
+    }
+
+    /**
+     * Recomputes / appends accuracy log entries for closed months that have later month data.
+     * Persists to localStorage without duplicating existing months.
+     */
+    function updateAccuracyLog() {
+      if (!store.transactions || store.transactions.length === 0) {
+        return loadAccuracyLog();
+      }
+
+      const distinctMonths = getDistinctMonths();
+      if (distinctMonths.length === 0) return loadAccuracyLog();
+
+      const allMonthlyTotals = distinctMonths.map(mon => {
+        const total = store.transactions
+          .filter(t => t.date && t.date.startsWith(mon))
+          .reduce((sum, t) => sum + (t.grandTotal || 0), 0);
+        return { month: mon, total };
+      });
+
+      const closedMonthsWithLater = distinctMonths.filter(mon => {
+        const [yStr, mStr] = mon.split('-');
+        const lDay = new Date(parseInt(yStr, 10), parseInt(mStr, 10), 0).getDate();
+        const monEnd = `${mon}-${String(lDay).padStart(2, '0')}`;
+        return store.transactions.some(t => t.date && t.date > monEnd);
+      });
+
+      const computedEntries = [];
+      for (const cMon of closedMonthsWithLater) {
+        const [yStr, mStr] = cMon.split('-');
+        const y = parseInt(yStr, 10);
+        const m = parseInt(mStr, 10);
+        const lDay = new Date(y, m, 0).getDate();
+        const firstDate = `${cMon}-01`;
+        const lastDate = `${cMon}-${String(lDay).padStart(2, '0')}`;
+        const day15 = `${cMon}-15`;
+
+        const txsInMon = store.transactions.filter(t => t.date && t.date.startsWith(cMon));
+        const fullActual = txsInMon.reduce((sum, t) => sum + (t.grandTotal || 0), 0);
+        const txsTo15 = txsInMon.filter(t => t.date <= day15);
+        const salesTo15 = txsTo15.reduce((sum, t) => sum + (t.grandTotal || 0), 0);
+
+        const elapsed15 = countWorkingDays(firstDate, day15);
+        const totalDays = countWorkingDays(firstDate, lastDate);
+        const rate = runRate(salesTo15, elapsed15, totalDays);
+        const sIdx = seasonalIndex(m, allMonthlyTotals);
+        const fRange = forecastRange(rate, sIdx, { workingDaysElapsed: elapsed15 });
+        const fBase = fRange.base;
+
+        const errorBaht = Math.abs(fullActual - fBase);
+        const errorPct = fullActual > 0 ? Number(((errorBaht / fullActual) * 100).toFixed(2)) : 0;
+
+        computedEntries.push({
+          month: cMon,
+          salesTo15,
+          workingDaysElapsed: elapsed15,
+          totalWorkingDays: totalDays,
+          forecastBase: fBase,
+          actual: fullActual,
+          errorBaht,
+          errorPct,
+          seasonalIndex: sIdx
+        });
+      }
+
+      // Merge with existing localStorage log
+      const existingLog = loadAccuracyLog();
+      const map = new Map();
+      for (const item of existingLog) {
+        if (item && item.month) map.set(item.month, item);
+      }
+      for (const item of computedEntries) {
+        map.set(item.month, item);
+      }
+
+      const merged = Array.from(map.values()).sort((a, b) => a.month.localeCompare(b.month));
+
+      let cumError = 0;
+      for (let i = 0; i < merged.length; i++) {
+        cumError += (merged[i].errorPct || 0);
+        merged[i].runningMape = Number((cumError / (i + 1)).toFixed(2));
+      }
+
+      saveAccuracyLog(merged);
+      return merged;
+    }
+
+    /**
+     * Pure calculation helper for Trend & Forecast metrics
+     */
+    function computeTrendMetrics(targetMonth) {
+      if (!store.transactions || store.transactions.length === 0) return null;
+
+      const distinctMonths = getDistinctMonths();
+      if (distinctMonths.length === 0) return null;
+
+      const latestMonth = distinctMonths[distinctMonths.length - 1];
+      const selectedMonth = targetMonth && distinctMonths.includes(targetMonth)
+        ? targetMonth
+        : (store.selectedMonth || latestMonth);
+
+      const isOlderMonth = selectedMonth < latestMonth;
+      const isBacktestActive = Boolean(store.backtestMode || isOlderMonth);
+
+      const monthlyTotalsMap = {};
+      for (const mon of distinctMonths) {
+        monthlyTotalsMap[mon] = store.transactions
+          .filter(t => t.date && t.date.startsWith(mon))
+          .reduce((sum, t) => sum + (t.grandTotal || 0), 0);
+      }
+
+      const monthlyTotalsArray = distinctMonths.map(mon => monthlyTotalsMap[mon]);
+      const maSeries = movingAverage3.series(monthlyTotalsArray);
+
+      let yoySeries = null;
+      const has12Months = distinctMonths.length >= 12;
+      if (has12Months) {
+        yoySeries = distinctMonths.map((mon, idx) => {
+          if (idx >= 12) {
+            return monthlyTotalsArray[idx - 12];
+          }
+          return null;
+        });
+      }
+
+      const allMonthlyTotals = distinctMonths.map(mon => ({ month: mon, total: monthlyTotalsMap[mon] }));
+      const presentMonthNums = Array.from(new Set(distinctMonths.map(m => parseInt(m.split('-')[1], 10)))).sort((a, b) => a - b);
+      const monthNamesShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+      const seasonalBars = presentMonthNums.map(mNum => {
+        const idxVal = seasonalIndex(mNum, allMonthlyTotals);
+        return {
+          monthNum: mNum,
+          label: `${monthNamesShort[mNum - 1]} (M${mNum})`,
+          index: idxVal,
+          isHigh: idxVal >= 1.0
+        };
+      });
+
+      const [yStr, mStr] = selectedMonth.split('-');
+      const y = parseInt(yStr, 10);
+      const m = parseInt(mStr, 10);
+      const lastDayNum = new Date(y, m, 0).getDate();
+      const firstDate = `${selectedMonth}-01`;
+      const lastDate = `${selectedMonth}-${String(lastDayNum).padStart(2, '0')}`;
+      const day15 = `${selectedMonth}-15`;
+
+      const txsInSelected = store.transactions.filter(t => t.date && t.date.startsWith(selectedMonth));
+      const fullActual = txsInSelected.reduce((sum, t) => sum + (t.grandTotal || 0), 0);
+
+      let salesToDate = 0;
+      let workingDaysElapsed = 0;
+      let totalWorkingDays = countWorkingDays(firstDate, lastDate);
+      let runRateVal = 0;
+      let forecastObj = null;
+      let errorBaht = 0;
+      let errorPct = 0;
+
+      if (isBacktestActive) {
+        const txsTo15 = txsInSelected.filter(t => t.date <= day15);
+        salesToDate = txsTo15.reduce((sum, t) => sum + (t.grandTotal || 0), 0);
+        workingDaysElapsed = countWorkingDays(firstDate, day15);
+        runRateVal = runRate(salesToDate, workingDaysElapsed, totalWorkingDays);
+        const sIdx = seasonalIndex(m, allMonthlyTotals);
+        forecastObj = forecastRange(runRateVal, sIdx, { workingDaysElapsed });
+        errorBaht = Math.abs(fullActual - forecastObj.base);
+        errorPct = fullActual > 0 ? Number(((errorBaht / fullActual) * 100).toFixed(2)) : 0;
+      } else {
+        const hasLaterTx = store.transactions.some(t => t.date && t.date > lastDate);
+        if (hasLaterTx) {
+          salesToDate = fullActual;
+          workingDaysElapsed = totalWorkingDays;
+        } else {
+          salesToDate = fullActual;
+          const maxTxDate = txsInSelected.reduce((max, t) => (!max || t.date > max ? t.date : max), null);
+          workingDaysElapsed = maxTxDate ? countWorkingDays(firstDate, maxTxDate) : 0;
+        }
+        runRateVal = runRate(salesToDate, workingDaysElapsed, totalWorkingDays);
+        const sIdx = seasonalIndex(m, allMonthlyTotals);
+        forecastObj = forecastRange(runRateVal, sIdx, { workingDaysElapsed });
+        errorBaht = Math.abs(fullActual - forecastObj.base);
+        errorPct = fullActual > 0 ? Number(((errorBaht / fullActual) * 100).toFixed(2)) : 0;
+      }
+
+      const accuracyLog = updateAccuracyLog();
+
+      return {
+        distinctMonths,
+        selectedMonth,
+        latestMonth,
+        isOlderMonth,
+        isBacktestActive,
+        has12Months,
+        monthlyTotalsMap,
+        monthlyTotalsArray,
+        maSeries,
+        yoySeries,
+        seasonalBars,
+        targetMonthStats: {
+          month: selectedMonth,
+          salesToDate,
+          workingDaysElapsed,
+          totalWorkingDays,
+          runRate: runRateVal,
+          seasonalIndex: seasonalIndex(m, allMonthlyTotals),
+          forecast: forecastObj,
+          fullActual,
+          errorBaht,
+          errorPct
+        },
+        accuracyLog
+      };
+    }
+
+    function renderAccuracyLogTable(data) {
+      const tbody = document.getElementById('accuracy-log-table-body');
+      if (!tbody) return;
+
+      const log = data.accuracyLog || [];
+      const selMonth = data.selectedMonth;
+      const isBacktest = data.isBacktestActive;
+      const tStats = data.targetMonthStats;
+
+      const isInLog = log.some(item => item.month === selMonth);
+      let rowsHtml = '';
+
+      if (isBacktest && !isInLog && tStats && tStats.fullActual > 0) {
+        const errorGradeClass = tStats.errorPct <= 5 ? 'grade-high' : (tStats.errorPct <= 10 ? 'grade-moderate' : 'grade-variance');
+        const errorGradeText = tStats.errorPct <= 5 ? 'High (<5%)' : (tStats.errorPct <= 10 ? 'Good (<10%)' : 'Variance (>10%)');
+        const sign = (tStats.fullActual - tStats.forecast.base) >= 0 ? '+' : '';
+
+        rowsHtml += `
+          <tr style="background: rgba(245, 158, 11, 0.12); font-weight: 600; border-left: 3px solid #f59e0b;">
+            <td>
+              <div style="color: #fbbf24; display: flex; align-items: center; gap: 6px;">
+                <span>⚡ ${formatMonthDisplay(selMonth)}</span>
+                <span class="accuracy-grade-pill grade-variance" style="font-size: 10px;">Backtest Simulation</span>
+              </div>
+              <div style="font-size: 11px; color: var(--text-muted); font-family: monospace;">Cutoff: 15th Day</div>
+            </td>
+            <td style="text-align: right;" class="text-num">${formatLargeTotal(tStats.salesToDate)} <span style="font-size: 11px; color: var(--text-muted);">(${tStats.workingDaysElapsed}/${tStats.totalWorkingDays}d)</span></td>
+            <td style="text-align: right; color: #60a5fa;" class="text-num">${formatLargeTotal(tStats.forecast.base)}</td>
+            <td style="text-align: right;" class="text-num">${formatLargeTotal(tStats.fullActual)}</td>
+            <td style="text-align: right; color: var(--text-secondary);" class="text-num">${sign}${formatLargeTotal(tStats.fullActual - tStats.forecast.base)}</td>
+            <td style="text-align: right; color: #34d399;" class="text-num">${tStats.errorPct.toFixed(2)}%</td>
+            <td style="text-align: right; font-weight: 700; color: #34d399;" class="text-num">${tStats.errorPct.toFixed(2)}%</td>
+            <td style="text-align: center;"><span class="accuracy-grade-pill ${errorGradeClass}">${errorGradeText}</span></td>
+          </tr>
+        `;
+      }
+
+      if (log.length === 0 && !rowsHtml) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 24px;">
+              No closed months with later month data available yet. Ingest multiple months of reports or use Backtest Mode to evaluate forecast accuracy.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      rowsHtml += log.map(item => {
+        const isSelected = item.month === selMonth;
+        const sign = (item.actual - item.forecastBase) >= 0 ? '+' : '';
+        const errorGradeClass = item.errorPct <= 5 ? 'grade-high' : (item.errorPct <= 10 ? 'grade-moderate' : 'grade-variance');
+        const errorGradeText = item.errorPct <= 5 ? 'High (<5%)' : (item.errorPct <= 10 ? 'Good (<10%)' : 'Variance (>10%)');
+        const rowStyle = isSelected
+          ? 'background: rgba(59, 130, 246, 0.12); font-weight: 600; border-left: 3px solid #3b82f6;'
+          : '';
+
+        return `
+          <tr style="${rowStyle}">
+            <td>
+              <div style="color: ${isSelected ? 'var(--accent)' : 'var(--text-primary)'}; font-weight: 600;">
+                ${formatMonthDisplay(item.month)} ${isSelected ? '◄' : ''}
+              </div>
+              <div style="font-size: 11px; color: var(--text-muted); font-family: monospace;">${item.month}</div>
+            </td>
+            <td style="text-align: right;" class="text-num">${formatLargeTotal(item.salesTo15)} <span style="font-size: 11px; color: var(--text-muted);">(${item.workingDaysElapsed}/${item.totalWorkingDays}d)</span></td>
+            <td style="text-align: right; color: #60a5fa;" class="text-num">${formatLargeTotal(item.forecastBase)}</td>
+            <td style="text-align: right;" class="text-num">${formatLargeTotal(item.actual)}</td>
+            <td style="text-align: right; color: var(--text-secondary);" class="text-num">${sign}${formatLargeTotal(item.actual - item.forecastBase)}</td>
+            <td style="text-align: right; color: ${item.errorPct <= 10 ? '#34d399' : '#fbbf24'};" class="text-num">${item.errorPct.toFixed(2)}%</td>
+            <td style="text-align: right; font-weight: 700; color: ${item.runningMape <= 10 ? '#34d399' : '#fbbf24'};" class="text-num">${item.runningMape.toFixed(2)}%</td>
+            <td style="text-align: center;"><span class="accuracy-grade-pill ${errorGradeClass}">${errorGradeText}</span></td>
+          </tr>
+        `;
+      }).join('');
+
+      tbody.innerHTML = rowsHtml;
+    }
+
+    function renderTrendPage() {
+      const emptyState = document.getElementById('trend-empty-state');
+      const trendContent = document.getElementById('trend-content');
+
+      if (!emptyState || !trendContent) return;
+
+      if (!store.transactions || store.transactions.length === 0) {
+        emptyState.classList.remove('hidden');
+        trendContent.classList.add('hidden');
+        destroyTrendCharts();
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+      trendContent.classList.remove('hidden');
+
+      const distinctMonths = getDistinctMonths();
+      if (distinctMonths.length === 0) {
+        emptyState.classList.remove('hidden');
+        trendContent.classList.add('hidden');
+        return;
+      }
+
+      const latestMonth = distinctMonths[distinctMonths.length - 1];
+      if (!store.selectedMonth || !distinctMonths.includes(store.selectedMonth)) {
+        store.selectedMonth = store.overviewSelectedMonth || latestMonth;
+      }
+
+      // Populate Trend Month Selector dropdown
+      const sel = document.getElementById('trend-month-select');
+      if (sel) {
+        sel.innerHTML = distinctMonths.map(mon => {
+          const isLatest = mon === latestMonth;
+          return `<option value="${mon}" ${mon === store.selectedMonth ? 'selected' : ''}>${formatMonthDisplay(mon)}${isLatest ? ' (Latest)' : ''}</option>`;
+        }).join('');
+      }
+
+      // Sync Backtest Toggle
+      const toggle = document.getElementById('trend-backtest-toggle');
+      if (toggle) {
+        const isOlder = store.selectedMonth < latestMonth;
+        if (isOlder) {
+          store.backtestMode = true;
+        }
+        toggle.checked = Boolean(store.backtestMode);
+      }
+
+      const data = computeTrendMetrics(store.selectedMonth);
+      if (!data) return;
+
+      const tStats = data.targetMonthStats;
+
+      // Update Backtest Banner
+      const banner = document.getElementById('trend-backtest-banner');
+      const bannerDesc = document.getElementById('trend-backtest-desc');
+      const bannerStats = document.getElementById('trend-backtest-stats');
+      if (banner) {
+        if (data.isBacktestActive) {
+          banner.classList.remove('hidden');
+          if (bannerDesc) {
+            bannerDesc.textContent = `Forecasting for ${formatMonthDisplay(data.selectedMonth)} as if observed on the 15th day (${tStats.workingDaysElapsed} of ${tStats.totalWorkingDays} working days elapsed).`;
+          }
+          if (bannerStats) {
+            bannerStats.innerHTML = `Forecast: <span style="color:#60a5fa">${formatLargeTotal(tStats.forecast.base)}</span> | Actual: <span style="color:#ffffff">${formatLargeTotal(tStats.fullActual)}</span> | Error: <span style="color:#34d399">${tStats.errorPct.toFixed(2)}%</span>`;
+          }
+        } else {
+          banner.classList.add('hidden');
+        }
+      }
+
+      // KPI 1: Month-to-Date / Pace
+      const elSalesLabel = document.getElementById('trend-kpi-sales-label');
+      const elSalesVal = document.getElementById('trend-kpi-sales-val');
+      const elSalesSub = document.getElementById('trend-kpi-sales-sub');
+      const elPaceBadge = document.getElementById('trend-kpi-pace-badge');
+
+      if (elSalesLabel) elSalesLabel.textContent = data.isBacktestActive ? '15th-Day Cutoff Sales' : 'Month-to-Date Sales';
+      if (elSalesVal) elSalesVal.textContent = formatLargeTotal(tStats.salesToDate);
+      if (elSalesSub) {
+        elSalesSub.textContent = `${tStats.workingDaysElapsed} of ${tStats.totalWorkingDays} working days elapsed`;
+      }
+      if (elPaceBadge) {
+        elPaceBadge.textContent = data.isBacktestActive ? '15th Cutoff' : 'Current Pace';
+      }
+
+      // KPI 2: Forecast Range
+      const elBaseVal = document.getElementById('trend-kpi-base-val');
+      const elRangeSub = document.getElementById('trend-kpi-range-sub');
+      const elConfBadge = document.getElementById('trend-kpi-conf-badge');
+      const elMethodDetail = document.getElementById('trend-kpi-method-detail');
+
+      if (elBaseVal) elBaseVal.textContent = formatLargeTotal(tStats.forecast.base);
+      if (elRangeSub) {
+        elRangeSub.textContent = `Low: ${formatLargeTotal(tStats.forecast.low)} | High: ${formatLargeTotal(tStats.forecast.high)}`;
+      }
+      if (elConfBadge) elConfBadge.textContent = tStats.forecast.confidence || 'Base Forecast';
+      if (elMethodDetail) {
+        elMethodDetail.textContent = `Pace × Seasonal Index (${tStats.seasonalIndex.toFixed(2)}x)`;
+      }
+
+      // KPI 3: Actual Final Sales
+      const elActualVal = document.getElementById('trend-kpi-actual-val');
+      const elActualSub = document.getElementById('trend-kpi-actual-sub');
+      const elActualDetail = document.getElementById('trend-kpi-actual-detail');
+      if (elActualVal) elActualVal.textContent = formatLargeTotal(tStats.fullActual);
+      if (elActualSub) {
+        elActualSub.textContent = `Variance: ${tStats.fullActual - tStats.forecast.base >= 0 ? '+' : ''}${formatLargeTotal(tStats.fullActual - tStats.forecast.base)}`;
+      }
+      if (elActualDetail) {
+        elActualDetail.textContent = `Error against forecast: ${tStats.errorPct.toFixed(2)}%`;
+      }
+
+      // KPI 4: Running MAPE
+      const elMapeVal = document.getElementById('trend-kpi-mape-val');
+      const elMapeSub = document.getElementById('trend-kpi-mape-sub');
+      const elMapeDetail = document.getElementById('trend-kpi-mape-detail');
+      const log = data.accuracyLog;
+      const latestMape = log && log.length > 0 ? log[log.length - 1].runningMape : null;
+      if (elMapeVal) {
+        if (latestMape != null) {
+          elMapeVal.textContent = `${latestMape.toFixed(2)}%`;
+          elMapeVal.style.color = latestMape <= 10 ? '#34d399' : '#fbbf24';
+        } else if (data.isBacktestActive && tStats.fullActual > 0) {
+          elMapeVal.textContent = `${tStats.errorPct.toFixed(2)}%`;
+          elMapeVal.style.color = tStats.errorPct <= 10 ? '#34d399' : '#fbbf24';
+        } else {
+          elMapeVal.textContent = 'N/A';
+          elMapeVal.style.color = 'var(--text-primary)';
+        }
+      }
+      if (elMapeSub) {
+        elMapeSub.textContent = log.length > 0 ? `Across ${log.length} closed month${log.length > 1 ? 's' : ''}` : 'Requires closed months';
+      }
+      if (elMapeDetail) {
+        elMapeDetail.textContent = 'Saved to localStorage';
+      }
+
+      // Render Trend Charts
+      renderTrendRevenueMAChart(data);
+      renderTrendSeasonalChart(data);
+      renderTrendForecastBandChart(data);
+
+      // Render Accuracy Log Table
+      renderAccuracyLogTable(data);
+    }
     function switchTab(tabId) {
       const validTabs = ['overview', 'trend', 'product', 'customer'];
       if (!validTabs.includes(tabId)) tabId = 'overview';
@@ -3333,6 +4486,8 @@ Delivers:
 
       if (tabId === 'overview') {
         renderOverviewPage();
+      } else if (tabId === 'trend') {
+        renderTrendPage();
       }
     }
 
@@ -3456,21 +4611,26 @@ Delivers:
       } finally {
         if (loading) loading.classList.add('hidden');
         renderSummaryTable();
-        // Set overviewSelectedMonth to latest month from loaded files if available
+        // Set selectedMonth and overviewSelectedMonth to latest month from loaded files if available
         const months = getDistinctMonths();
         if (months.length > 0) {
           store.overviewSelectedMonth = months[months.length - 1];
+          store.selectedMonth = months[months.length - 1];
         }
+        updateAccuracyLog();
         renderOverviewPage();
+        renderTrendPage();
       }
     }
 
     function clearStore() {
       resetStore();
+      destroyTrendCharts();
       const input = document.getElementById('file-input');
       if (input) input.value = '';
       renderSummaryTable();
       renderOverviewPage();
+      renderTrendPage();
     }
 
     /* Dropzone Event Handlers */
@@ -3888,8 +5048,44 @@ Delivers:
         emptyMetrics
       );
 
+      // Test Case 17: Milestone M5 - Backtest calculation pipeline accuracy (March 2026 hand-verified case)
+      const m5Sales15 = 2670583.58;
+      const m5Elapsed = 12;
+      const m5TotalDays = 26;
+      const m5ActualMarch = 5580325.23;
+      const m5RunRate = runRate(m5Sales15, m5Elapsed, m5TotalDays);
+      const m5SeasonalIdx = 1.0; // single month baseline
+      const m5Range = forecastRange(m5RunRate, m5SeasonalIdx, { workingDaysElapsed: m5Elapsed });
+      const m5ErrorPct = mape([m5Range.base], [m5ActualMarch]);
+      assert(
+        'M5 Backtest Pipeline: March 2026 15th-day cutoff yields ฿5,786,264.42 forecast base and ~3.69% error against ฿5,580,325.23 actual',
+        Math.abs(m5Range.base - 5786264.42) <= 1.0 && Math.abs(m5ErrorPct - 3.69) <= 0.05,
+        { base: m5Range.base, errorPct: m5ErrorPct }
+      );
+
+      // Test Case 18: Milestone M5 - Accuracy Log persistence and running MAPE
+      const testLogEntries = [
+        { month: '2026-01', forecastBase: 5000000, actual: 5200000, errorPct: 3.85 },
+        { month: '2026-02', forecastBase: 4800000, actual: 4600000, errorPct: 4.35 }
+      ];
+      saveAccuracyLog(testLogEntries);
+      const loadedLog = loadAccuracyLog();
+      assert(
+        'M5 Persistence: Accuracy log persists to localStorage and retrieves correctly',
+        Array.isArray(loadedLog) && loadedLog.length === 2 && loadedLog[0].month === '2026-01',
+        loadedLog
+      );
+
+      // Test Case 19: Milestone M5 - computeTrendMetrics handles empty store gracefully
+      const emptyTrend = computeTrendMetrics(null);
+      assert(
+        'M5 Trend Engine: computeTrendMetrics handles empty transactions without throwing and returns null',
+        emptyTrend === null,
+        emptyTrend
+      );
+
       const allPassed = results.every(r => r.passed);
-      console.log(`=== M4 runChecks() finished: ${results.filter(r => r.passed).length}/${results.length} PASSED ===`);
+      console.log(`=== M5 runChecks() finished: ${results.filter(r => r.passed).length}/${results.length} PASSED ===`);
       console.groupEnd();
 
       // Update UI indicator
