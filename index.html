@@ -1093,6 +1093,137 @@ Delivers:
       border: 1px solid rgba(245, 158, 11, 0.3);
     }
 
+    /* -------------------------------------------------------------
+       MILESTONE M6: PRODUCT & CATEGORY PAGE STYLES
+       ------------------------------------------------------------- */
+    .product-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      width: 100%;
+    }
+
+    .product-content {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      width: 100%;
+    }
+
+    .category-note-box {
+      margin-top: 12px;
+      padding: 10px 14px;
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px dashed rgba(245, 158, 11, 0.35);
+      border-radius: var(--radius-sm);
+      color: var(--text-secondary);
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      line-height: 1.4;
+    }
+
+    /* Heatmap Grid */
+    .heatmap-wrapper {
+      width: 100%;
+      min-width: 680px;
+    }
+
+    .heatmap-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 5px;
+      font-size: 12px;
+    }
+
+    .heatmap-table th {
+      padding: 9px 12px;
+      background: var(--bg-surface-elevated);
+      color: var(--text-secondary);
+      font-weight: 600;
+      border-radius: 4px;
+      white-space: nowrap;
+      text-align: center;
+    }
+
+    .heatmap-table th.th-cat {
+      text-align: left;
+      min-width: 220px;
+    }
+
+    .heatmap-table th.th-total {
+      text-align: right;
+      min-width: 120px;
+      background: rgba(59, 130, 246, 0.15);
+      color: #93c5fd;
+    }
+
+    .heatmap-row td {
+      border-radius: 4px;
+      padding: 10px 10px;
+      text-align: center;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      transition: transform 0.12s ease, outline 0.12s ease;
+      cursor: default;
+      white-space: nowrap;
+    }
+
+    .heatmap-row td:hover {
+      transform: scale(1.05);
+      outline: 2px solid #60a5fa;
+      z-index: 2;
+      position: relative;
+    }
+
+    .heatmap-cell-cat {
+      text-align: left !important;
+      font-family: var(--font-sans) !important;
+      background: var(--bg-canvas) !important;
+      color: var(--text-primary) !important;
+      font-weight: 600;
+      border: 1px solid var(--border-subtle);
+      padding: 9px 12px !important;
+      cursor: default !important;
+    }
+
+    .heatmap-cell-cat:hover {
+      transform: none !important;
+      outline: none !important;
+    }
+
+    .heatmap-cell-total {
+      text-align: right !important;
+      font-weight: 700;
+      background: rgba(30, 41, 59, 0.8) !important;
+      border: 1px solid var(--border-subtle);
+      color: #93c5fd !important;
+      padding: 9px 12px !important;
+    }
+
+    .heatmap-legend-container {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .heatmap-legend-bar {
+      width: 140px;
+      height: 10px;
+      border-radius: 3px;
+      background: linear-gradient(90deg, rgba(30, 41, 59, 0.6) 0%, rgba(59, 130, 246, 0.4) 30%, rgba(37, 99, 235, 0.75) 70%, rgba(29, 78, 216, 1) 100%);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .sort-icon {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-left: 4px;
+    }
+
     /* Footer */
     .app-footer {
       border-top: 1px solid var(--border-subtle);
@@ -1693,14 +1824,181 @@ Delivers:
         </div>
       </section>
 
-      <!-- Page 3: Product & Category Panel Shell -->
-      <section id="panel-product" class="page-panel hidden">
-        <span class="page-panel-badge">Milestone M6 Preview</span>
-        <h2 class="page-panel-title">Product &amp; Category Analysis</h2>
-        <p class="page-panel-desc">
-          This panel will feature the category revenue breakdown, top-15 product Pareto chart with cumulative %,
-          category × month revenue heatmap, and searchable product table once M6 is implemented.
-        </p>
+      <!-- Page 3: Product & Category Panel (Milestone M6) -->
+      <section id="panel-product" class="product-panel hidden">
+        <!-- Friendly Empty State -->
+        <div id="product-empty-state" class="overview-empty-state">
+          <div class="overview-empty-icon">📦</div>
+          <h2 class="overview-empty-title">Upload your sales reports to see product &amp; category analysis</h2>
+          <p class="overview-empty-desc">
+            Drag and drop sales reports into the dropzone above to view category revenue share (Donut), top-15 product Pareto distribution with cumulative %, category × month revenue heatmap, and the full searchable product directory.
+          </p>
+          <button type="button" class="btn-primary" onclick="triggerFileInput()" style="display: inline-flex; align-items: center; gap: 8px;">
+            <span>📁 Upload Sales Reports</span>
+          </button>
+        </div>
+
+        <!-- Populated Product Dashboard Content -->
+        <div id="product-content" class="product-content hidden">
+          <!-- Header Bar -->
+          <div class="overview-header-bar">
+            <div>
+              <span class="overview-page-badge">Product Intelligence</span>
+              <h1 class="overview-title">Product &amp; Category Portfolio Analysis</h1>
+              <p class="overview-subtitle">
+                Category revenue distribution, Pareto 80/20 product concentration, monthly seasonality heatmap, and SKU catalog
+              </p>
+            </div>
+            <!-- Quick Summary Badges -->
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <span class="brand-tag" id="badge-total-products">0 SKUs</span>
+              <span class="brand-tag" id="badge-total-categories">0 Categories</span>
+              <span class="brand-tag" id="badge-total-items-sold">0 Units Sold</span>
+            </div>
+          </div>
+
+          <!-- Top Row Charts: Donut (Category Share) & Pareto (Top 15 Products) -->
+          <div class="overview-charts-grid">
+            <!-- Chart 1: Donut Chart -->
+            <div class="overview-chart-card">
+              <div class="chart-card-header">
+                <div>
+                  <h3 class="chart-card-title">Category Revenue Share</h3>
+                  <div class="chart-card-subtitle">
+                    Distribution of total revenue across product category codes
+                  </div>
+                </div>
+                <span class="brand-tag">Category Split</span>
+              </div>
+
+              <div class="chart-canvas-container" style="height: 300px; display: flex; align-items: center; justify-content: center;">
+                <canvas id="chart-category-donut"></canvas>
+              </div>
+
+              <!-- Note under chart per requirement: "Category names are best-guess labels — confirm with the business owner." -->
+              <div class="category-note-box">
+                <span style="font-weight: 600; color: #fbbf24;">ⓘ Note:</span>
+                <span>Category names are best-guess labels — confirm with the business owner.</span>
+              </div>
+            </div>
+
+            <!-- Chart 2: Pareto Chart (Top 15 Products) -->
+            <div class="overview-chart-card">
+              <div class="chart-card-header">
+                <div>
+                  <h3 class="chart-card-title">Top 15 Products Pareto Analysis</h3>
+                  <div class="chart-card-subtitle">
+                    Product revenue (bars, primary axis) vs. cumulative share % (line, secondary axis)
+                  </div>
+                </div>
+                <span class="brand-tag">80/20 Pareto</span>
+              </div>
+
+              <div class="chart-canvas-container" style="height: 335px;">
+                <canvas id="chart-product-pareto"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 3: Category × Calendar Month Heatmap -->
+          <div class="overview-table-card">
+            <div class="table-card-header">
+              <div>
+                <h3 class="chart-card-title">Category × Calendar Month Revenue Heatmap</h3>
+                <div class="chart-card-subtitle">
+                  Cross-tabulation of category revenue across historical calendar months with dynamic color scaling
+                </div>
+              </div>
+              <div class="heatmap-legend-container" id="heatmap-legend-box">
+                <!-- Color scale legend -->
+              </div>
+            </div>
+
+            <div class="table-container" style="max-height: 520px; overflow: auto;">
+              <div id="heatmap-grid-container" class="heatmap-wrapper">
+                <!-- Dynamically generated hand-built CSS grid / table -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 4: Searchable, Sortable Product Table -->
+          <div class="overview-table-card">
+            <div class="table-card-header">
+              <div>
+                <h3 class="chart-card-title">Distinct Products Catalog</h3>
+                <div class="chart-card-subtitle">
+                  Searchable and sortable directory of every distinct SKU with sales volume, total revenue, and average unit price
+                </div>
+              </div>
+
+              <!-- Search and Filter Controls -->
+              <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <!-- Search Input -->
+                <div style="position: relative;">
+                  <input
+                    type="text"
+                    id="product-table-search"
+                    class="form-input"
+                    placeholder="Search product description or SKU..."
+                    style="padding: 7px 12px; font-size: 13px; width: 260px;"
+                    oninput="handleProductSearch(this.value)"
+                  />
+                </div>
+
+                <!-- Category Filter -->
+                <select
+                  id="product-category-filter"
+                  class="month-selector-dropdown"
+                  style="font-size: 13px; padding: 7px 10px;"
+                  onchange="handleProductCategoryFilter(this.value)"
+                >
+                  <option value="all">All Categories</option>
+                  <!-- Dynamically populated -->
+                </select>
+
+                <!-- SKU Counter badge -->
+                <span id="product-table-count" class="brand-tag">0 products</span>
+              </div>
+            </div>
+
+            <div class="table-container">
+              <table class="summary-table" id="product-directory-table">
+                <thead>
+                  <tr>
+                    <th style="cursor: pointer; user-select: none;" onclick="handleProductSort('description')" title="Click to sort by Description">
+                      Product Description <span id="sort-icon-description" class="sort-icon">⇅</span>
+                    </th>
+                    <th style="cursor: pointer; user-select: none;" onclick="handleProductSort('category')" title="Click to sort by Category">
+                      Category <span id="sort-icon-category" class="sort-icon">⇅</span>
+                    </th>
+                    <th style="text-align: right; cursor: pointer; user-select: none;" onclick="handleProductSort('qty')" title="Click to sort by Quantity">
+                      Total Qty Sold <span id="sort-icon-qty" class="sort-icon">⇅</span>
+                    </th>
+                    <th style="text-align: right; cursor: pointer; user-select: none;" onclick="handleProductSort('revenue')" title="Click to sort by Revenue">
+                      Total Revenue (฿) <span id="sort-icon-revenue" class="sort-icon">▼</span>
+                    </th>
+                    <th style="text-align: right; cursor: pointer; user-select: none;" onclick="handleProductSort('avgPrice')" title="Click to sort by Average Unit Price">
+                      Avg Unit Price (฿) <span id="sort-icon-avgPrice" class="sort-icon">⇅</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody id="product-table-body">
+                  <!-- Dynamically rendered rows -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Table Pagination / Footer -->
+            <div id="product-table-pagination" style="display: flex; align-items: center; justify-content: space-between; padding-top: 12px; font-size: 12px; color: var(--text-muted); flex-wrap: wrap; gap: 10px;">
+              <span id="product-pagination-info">Showing 1-25 of 100</span>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <button type="button" class="btn-secondary" id="btn-product-prev" onclick="handleProductPageChange(-1)" style="font-size: 11px; padding: 4px 10px;">◀ Previous</button>
+                <span id="product-page-num" style="font-weight: 600; color: var(--text-primary);">Page 1</span>
+                <button type="button" class="btn-secondary" id="btn-product-next" onclick="handleProductPageChange(1)" style="font-size: 11px; padding: 4px 10px;">Next ▶</button>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- Page 4: Customer & Cash Flow Panel Shell -->
@@ -1716,7 +2014,7 @@ Delivers:
 
     <!-- Footer -->
     <footer class="app-footer">
-      <span>Sales Intelligence Dashboard (Track A) • Milestone M5: Trend &amp; Forecast</span>
+      <span>Sales Intelligence Dashboard (Track A) • Milestone M6: Product &amp; Category</span>
       <span id="footer-check-info">Self-Checks: All green</span>
     </footer>
   </div>
@@ -1736,6 +2034,36 @@ Delivers:
       CASH: 'รายงานขายเงินสด',
       CREDIT: 'รายงานใบกำกับสินค้า',
       DEPOSIT: 'รายงานใบรับมัดจำ'
+    };
+
+    /**
+     * Shared configuration and color-scale functions per M6
+     */
+    const CONFIG = {
+      // Shared color-scale function for Heatmap per M6
+      getHeatmapColor: function(value, maxValue) {
+        if (!value || value <= 0 || !maxValue || maxValue <= 0) {
+          return 'rgba(30, 41, 59, 0.4)';
+        }
+        const ratio = Math.min(1, Math.max(0, value / maxValue));
+        if (ratio < 0.2) {
+          const alpha = 0.2 + (ratio / 0.2) * 0.25;
+          return `rgba(59, 130, 246, ${alpha.toFixed(2)})`;
+        } else if (ratio < 0.55) {
+          const alpha = 0.45 + ((ratio - 0.2) / 0.35) * 0.35;
+          return `rgba(37, 99, 235, ${alpha.toFixed(2)})`;
+        } else if (ratio < 0.85) {
+          const alpha = 0.8 + ((ratio - 0.55) / 0.3) * 0.15;
+          return `rgba(29, 78, 216, ${alpha.toFixed(2)})`;
+        } else {
+          return 'rgba(30, 64, 175, 1)';
+        }
+      },
+      getHeatmapTextColor: function(value, maxValue) {
+        if (!value || value <= 0) return '#64748b';
+        const ratio = Math.min(1, Math.max(0, value / maxValue));
+        return ratio > 0.35 ? '#ffffff' : '#cbd5e1';
+      }
     };
 
     /* ================= UTILS ================== */
@@ -1768,21 +2096,23 @@ Delivers:
 
     /**
      * Category code lookup map per schema.md section 6
+     * Specifically categories 02 (Roofing Sheet) and 88 (PU Insulation)
      */
     const CATEGORY_MAP = {
       '01': 'แผ่นหลังคาเหล็ก เมทัลชีท',
-      '02': 'ฉนวนกันความร้อน PU Foam',
+      '02': 'แผ่นหลังคาเหล็ก Roofing Sheet',
       '03': 'แผ่นใสโปร่งแสง Translucent',
       '04': 'ครอบและแฟลชชิ่ง Flashing',
       '05': 'สกรูและอุปกรณ์ยึด Fasteners',
       '06': 'ฉนวนกันความร้อน PE Foam',
       '07': 'เหล็กโครงสร้างและแป Purlins',
       '08': 'อุปกรณ์รางน้ำและแผ่นเรียบ',
+      '88': 'ฉนวนกันความร้อน PU Foam',
       'NA': 'อื่นๆ / ไม่ระบุหมวดหมู่'
     };
 
     function getCategoryDisplayName(code) {
-      if (!code) return 'อื่นๆ / ไม่ระบุหมวด';
+      if (!code) return 'อื่นๆ / ไม่ระบุหมวดหมู่';
       const c = String(code).trim();
       return CATEGORY_MAP[c] || `หมวด ${c}`;
     }
@@ -2503,6 +2833,13 @@ Delivers:
       seenTxIds: new Set(),
       seenItemKeys: new Set(),
       seenDepositIds: new Set(),
+      // Milestone M6: Product Page UI state
+      productSearchQuery: '',
+      productCategoryFilter: 'all',
+      productSortColumn: 'revenue',
+      productSortAsc: false,
+      productCurrentPage: 1,
+      productPageSize: 25,
       // Combined store metrics
       metrics: {
         totalRevenue: 0,
@@ -2542,9 +2879,15 @@ Delivers:
       store.metrics.duplicatesSkippedDeps = 0;
       store.metrics.minDate = null;
       store.metrics.maxDate = null;
+      store.productSearchQuery = '';
+      store.productCategoryFilter = 'all';
+      store.productSortColumn = 'revenue';
+      store.productSortAsc = false;
+      store.productCurrentPage = 1;
       store.metrics.filesUploaded = [];
       destroyOverviewCharts();
       destroyTrendCharts();
+      destroyProductCharts();
     }
 
     function recalculateStoreMetrics() {
@@ -4457,6 +4800,717 @@ Delivers:
       // Render Accuracy Log Table
       renderAccuracyLogTable(data);
     }
+
+    /* =============================================================
+       MILESTONE M6: PRODUCT & CATEGORY MODULE
+       ============================================================= */
+    let productDonutChart = null;
+    let productParetoChart = null;
+
+    function destroyProductCharts() {
+      if (productDonutChart) {
+        productDonutChart.destroy();
+        productDonutChart = null;
+      }
+      if (productParetoChart) {
+        productParetoChart.destroy();
+        productParetoChart = null;
+      }
+    }
+
+    /**
+     * Compact currency representation for dense heatmap cells and charts:
+     * e.g. ฿1.24M, ฿450K, ฿25K, ฿850
+     */
+    function formatCompactBaht(num) {
+      if (!num || num === 0) return '฿0';
+      const abs = Math.abs(num);
+      const sign = num < 0 ? '-' : '';
+      if (abs >= 1000000) {
+        return `${sign}฿${(abs / 1000000).toFixed(2)}M`;
+      } else if (abs >= 1000) {
+        return `${sign}฿${(abs / 1000).toFixed(0)}K`;
+      }
+      return `${sign}฿${Math.round(abs).toLocaleString('en-US')}`;
+    }
+
+    /**
+     * Extracts and aggregates product and category portfolio metrics
+     * from store.lineItems and store.transactions without DOM access.
+     */
+    function getProductData() {
+      if (!store.lineItems || store.lineItems.length === 0) {
+        return null;
+      }
+
+      // Map transaction ID to transaction date
+      const txDateMap = new Map();
+      if (store.transactions) {
+        for (const tx of store.transactions) {
+          if (tx.id && tx.date) {
+            txDateMap.set(tx.id, tx.date);
+          }
+        }
+      }
+
+      // 1. Group by Product Description
+      const prodMap = new Map();
+      // 2. Group by Category Code
+      const catMap = new Map();
+      // 3. Track distinct months
+      const monthsSet = new Set();
+
+      let grandTotalRevenue = 0;
+      let grandTotalQty = 0;
+
+      for (const item of store.lineItems) {
+        const desc = item.description ? String(item.description).trim() : 'Unknown Product';
+        const catCode = item.categoryCode ? String(item.categoryCode).trim() : 'NA';
+        const amount = Number(item.amount) || 0;
+        const qty = Number(item.qty) || 0;
+        const txDate = txDateMap.get(item.transactionId) || null;
+        const month = txDate ? txDate.substring(0, 7) : null;
+
+        if (month) {
+          monthsSet.add(month);
+        }
+
+        grandTotalRevenue += amount;
+        grandTotalQty += qty;
+
+        // Aggregate Product
+        if (!prodMap.has(desc)) {
+          prodMap.set(desc, {
+            description: desc,
+            categoryCode: catCode,
+            productCode: item.productCode || 'NA',
+            unit: item.unit || '',
+            totalQty: 0,
+            totalRevenue: 0,
+            monthlyRevenue: {}
+          });
+        }
+        const pObj = prodMap.get(desc);
+        pObj.totalQty += qty;
+        pObj.totalRevenue += amount;
+        if (month) {
+          pObj.monthlyRevenue[month] = (pObj.monthlyRevenue[month] || 0) + amount;
+        }
+
+        // Aggregate Category
+        if (!catMap.has(catCode)) {
+          catMap.set(catCode, {
+            code: catCode,
+            name: getCategoryDisplayName(catCode),
+            totalRevenue: 0,
+            totalQty: 0,
+            itemCount: 0,
+            productDescriptions: new Set(),
+            monthlyRevenue: {}
+          });
+        }
+        const cObj = catMap.get(catCode);
+        cObj.totalRevenue += amount;
+        cObj.totalQty += qty;
+        cObj.itemCount++;
+        cObj.productDescriptions.add(desc);
+        if (month) {
+          cObj.monthlyRevenue[month] = (cObj.monthlyRevenue[month] || 0) + amount;
+        }
+      }
+
+      // Transform products and compute average unit price
+      const products = Array.from(prodMap.values()).map(p => {
+        const avgPrice = p.totalQty > 0 ? (p.totalRevenue / p.totalQty) : 0;
+        return {
+          ...p,
+          avgPrice
+        };
+      });
+
+      // Sort products descending by total revenue
+      products.sort((a, b) => b.totalRevenue - a.totalRevenue);
+
+      // Transform categories and compute share percentage
+      const categories = Array.from(catMap.values()).map(c => {
+        const sharePct = grandTotalRevenue > 0 ? (c.totalRevenue / grandTotalRevenue) * 100 : 0;
+        return {
+          ...c,
+          sharePct,
+          productCount: c.productDescriptions.size
+        };
+      });
+
+      // Sort categories descending by revenue
+      categories.sort((a, b) => b.totalRevenue - a.totalRevenue);
+
+      // Distinct calendar months in chronological order
+      const distinctMonths = Array.from(monthsSet).sort();
+
+      // Top 15 products for Pareto Analysis
+      const top15 = products.slice(0, 15);
+      let cumulativeRevenue = 0;
+      const top15Products = top15.map(p => {
+        cumulativeRevenue += p.totalRevenue;
+        const cumulativePct = grandTotalRevenue > 0 ? (cumulativeRevenue / grandTotalRevenue) * 100 : 0;
+        return {
+          ...p,
+          cumulativeRevenue,
+          cumulativePct
+        };
+      });
+
+      return {
+        products,
+        categories,
+        distinctMonths,
+        grandTotalRevenue,
+        grandTotalQty,
+        top15Products
+      };
+    }
+
+    /**
+     * Requirement 1: Donut chart of revenue share by categoryCode,
+     * labeled using the schema.md section 6 lookup with note under chart.
+     */
+    function renderCategoryDonutChart(data) {
+      const canvas = document.getElementById('chart-category-donut');
+      if (!canvas || !window.Chart) return;
+
+      if (productDonutChart) {
+        productDonutChart.destroy();
+        productDonutChart = null;
+      }
+
+      if (!data || !data.categories || data.categories.length === 0) return;
+
+      const categories = data.categories;
+      const labels = categories.map(c => `[${c.code}] ${c.name}`);
+      const revenues = categories.map(c => Math.round(c.totalRevenue));
+
+      // Color assignment: give prominent distinctive colors to 02 and 88
+      const palette = [
+        '#3b82f6', // Sapphire Blue (02 Roofing Sheet)
+        '#10b981', // Emerald Green (88 PU Foam)
+        '#f59e0b', // Amber
+        '#8b5cf6', // Violet
+        '#ec4899', // Pink
+        '#06b6d4', // Cyan
+        '#f97316', // Orange
+        '#14b8a6', // Teal
+        '#6366f1', // Indigo
+        '#64748b'  // Slate
+      ];
+
+      const colors = categories.map((c, idx) => {
+        if (c.code === '02') return '#3b82f6';
+        if (c.code === '88') return '#10b981';
+        return palette[idx % palette.length];
+      });
+
+      const grandTotal = data.grandTotalRevenue || 1;
+
+      productDonutChart = new Chart(canvas, {
+        type: 'doughnut',
+        data: {
+          labels,
+          datasets: [{
+            data: revenues,
+            backgroundColor: colors,
+            borderColor: '#1e293b',
+            borderWidth: 2,
+            hoverOffset: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '58%',
+          plugins: {
+            legend: {
+              position: 'right',
+              labels: {
+                boxWidth: 12,
+                boxHeight: 12,
+                padding: 10,
+                color: '#94a3b8',
+                font: { size: 11 },
+                generateLabels: function(chart) {
+                  const chartData = chart.data;
+                  if (chartData.labels.length && chartData.datasets.length) {
+                    return chartData.labels.map((label, i) => {
+                      const val = chartData.datasets[0].data[i] || 0;
+                      const pct = ((val / grandTotal) * 100).toFixed(1);
+                      return {
+                        text: `${label} (${pct}%)`,
+                        fillStyle: chartData.datasets[0].backgroundColor[i],
+                        strokeStyle: chartData.datasets[0].borderColor,
+                        lineWidth: 1,
+                        hidden: !chart.isDatasetVisible(0),
+                        index: i
+                      };
+                    });
+                  }
+                  return [];
+                }
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  const val = context.raw || 0;
+                  const pct = ((val / grandTotal) * 100).toFixed(1);
+                  return ` ${context.label}: ${formatLargeTotal(val)} (${pct}%)`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    /**
+     * Requirement 2: Pareto chart of top 15 products (by description)
+     * by revenue as bars, plus cumulative-% line on secondary axis.
+     */
+    function renderProductParetoChart(data) {
+      const canvas = document.getElementById('chart-product-pareto');
+      if (!canvas || !window.Chart) return;
+
+      if (productParetoChart) {
+        productParetoChart.destroy();
+        productParetoChart = null;
+      }
+
+      if (!data || !data.top15Products || data.top15Products.length === 0) return;
+
+      const top15 = data.top15Products;
+      // Truncate labels for chart axis readability
+      const labels = top15.map(p => {
+        const d = p.description || '';
+        return d.length > 22 ? d.slice(0, 20) + '...' : d;
+      });
+      const revenueData = top15.map(p => Math.round(p.totalRevenue));
+      const cumPctData = top15.map(p => Number(p.cumulativePct.toFixed(1)));
+
+      productParetoChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              type: 'line',
+              label: 'Cumulative Share (%)',
+              data: cumPctData,
+              yAxisID: 'y1',
+              borderColor: '#f59e0b',
+              backgroundColor: 'rgba(245, 158, 11, 0.2)',
+              borderWidth: 2.5,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              pointBackgroundColor: '#f59e0b',
+              tension: 0.15,
+              order: 1
+            },
+            {
+              type: 'bar',
+              label: 'Product Revenue (฿)',
+              data: revenueData,
+              yAxisID: 'y',
+              backgroundColor: 'rgba(59, 130, 246, 0.75)',
+              borderColor: '#3b82f6',
+              borderWidth: 1,
+              borderRadius: 4,
+              order: 2
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: 'index',
+            intersect: false
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(51, 65, 85, 0.25)' },
+              ticks: {
+                color: '#94a3b8',
+                font: { size: 10 },
+                maxRotation: 45,
+                minRotation: 25
+              }
+            },
+            y: {
+              type: 'linear',
+              position: 'left',
+              beginAtZero: true,
+              grid: { color: 'rgba(51, 65, 85, 0.35)' },
+              ticks: {
+                color: '#94a3b8',
+                font: { size: 11 },
+                callback: function(val) {
+                  return formatCompactBaht(val);
+                }
+              }
+            },
+            y1: {
+              type: 'linear',
+              position: 'right',
+              min: 0,
+              max: 100,
+              grid: { drawOnChartArea: false },
+              ticks: {
+                color: '#fbbf24',
+                font: { size: 11 },
+                callback: function(val) {
+                  return val + '%';
+                }
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: {
+                boxWidth: 12,
+                color: '#94a3b8',
+                font: { size: 11 }
+              }
+            },
+            tooltip: {
+              callbacks: {
+                title: function(items) {
+                  if (!items.length) return '';
+                  const idx = items[0].dataIndex;
+                  return top15[idx] ? top15[idx].description : '';
+                },
+                label: function(context) {
+                  if (context.dataset.yAxisID === 'y1') {
+                    return ` Cumulative Share: ${context.raw}%`;
+                  }
+                  return ` Revenue: ${formatLargeTotal(context.raw)}`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    /**
+     * Requirement 3: Category (rows) × Calendar Month (columns) revenue heatmap,
+     * hand-built as a CSS grid of colored cells (no chart library) with
+     * a shared color-scale function from CONFIG.
+     */
+    function renderCategoryMonthHeatmap(data) {
+      const container = document.getElementById('heatmap-grid-container');
+      const legendBox = document.getElementById('heatmap-legend-box');
+      if (!container) return;
+
+      if (!data || !data.categories || data.categories.length === 0 || !data.distinctMonths || data.distinctMonths.length === 0) {
+        container.innerHTML = `
+          <div style="text-align: center; color: var(--text-muted); padding: 32px;">
+            Not enough monthly data to construct category heatmap. Ingest sales files to populate.
+          </div>
+        `;
+        if (legendBox) legendBox.innerHTML = '';
+        return;
+      }
+
+      const categories = data.categories;
+      const months = data.distinctMonths;
+
+      // Find max cell revenue across all categories and months
+      let maxCell = 0;
+      for (const c of categories) {
+        for (const m of months) {
+          const val = c.monthlyRevenue[m] || 0;
+          if (val > maxCell) maxCell = val;
+        }
+      }
+
+      // Render shared color scale legend
+      if (legendBox) {
+        legendBox.innerHTML = `
+          <span>Scale: ฿0</span>
+          <div class="heatmap-legend-bar" title="Color intensity scale: ฿0 to ${formatLargeTotal(maxCell)}"></div>
+          <span>${formatCompactBaht(maxCell)}</span>
+        `;
+      }
+
+      // Build HTML table for heatmap
+      let html = '<table class="heatmap-table">';
+
+      // Header row
+      html += '<thead><tr>';
+      html += '<th class="th-cat">Category Code &amp; Name</th>';
+      for (const m of months) {
+        html += `<th>${formatMonthDisplay(m)}</th>`;
+      }
+      html += '<th class="th-total">Category Total</th>';
+      html += '</tr></thead><tbody>';
+
+      // Rows for each category
+      for (const c of categories) {
+        html += '<tr class="heatmap-row">';
+        html += `<td class="heatmap-cell-cat" title="Category Code: ${c.code}">`;
+        html += `<span style="color: #60a5fa; font-weight: 700; margin-right: 4px;">[${c.code}]</span>`;
+        html += `<span>${sanitizeText(c.name)}</span>`;
+        html += '</td>';
+
+        for (const m of months) {
+          const val = c.monthlyRevenue[m] || 0;
+          const bg = CONFIG.getHeatmapColor(val, maxCell);
+          const textColor = CONFIG.getHeatmapTextColor(val, maxCell);
+          const displayTxt = val > 0 ? formatCompactBaht(val) : '<span style="color: #64748b;">-</span>';
+          const title = `Category: [${c.code}] ${c.name} | Month: ${formatMonthDisplay(m)} | Revenue: ${formatLargeTotal(val)}`;
+
+          html += `<td style="background-color: ${bg}; color: ${textColor};" title="${title}">${displayTxt}</td>`;
+        }
+
+        html += `<td class="heatmap-cell-total">${formatLargeTotal(c.totalRevenue)}</td>`;
+        html += '</tr>';
+      }
+
+      // Total row across months
+      html += '<tr class="heatmap-row" style="border-top: 2px solid var(--border-subtle);">';
+      html += '<td class="heatmap-cell-cat" style="font-weight: 700; color: #93c5fd !important;">Total Monthly Revenue</td>';
+      for (const m of months) {
+        const monthSum = categories.reduce((sum, c) => sum + (c.monthlyRevenue[m] || 0), 0);
+        html += `<td class="heatmap-cell-total" style="text-align: center !important;">${formatCompactBaht(monthSum)}</td>`;
+      }
+      html += `<td class="heatmap-cell-total" style="color: #38bdf8 !important;">${formatLargeTotal(data.grandTotalRevenue)}</td>`;
+      html += '</tr>';
+
+      html += '</tbody></table>';
+
+      container.innerHTML = html;
+    }
+
+    /**
+     * Requirement 4: Searchable, sortable table of every distinct product:
+     * description, category, total qty sold, total revenue, average unit price.
+     */
+    function renderProductTable(cachedData) {
+      const data = cachedData || getProductData();
+      const tbody = document.getElementById('product-table-body');
+      const countBadge = document.getElementById('product-table-count');
+      const catSelect = document.getElementById('product-category-filter');
+      const paginationInfo = document.getElementById('product-pagination-info');
+      const pageNumDisplay = document.getElementById('product-page-num');
+      const btnPrev = document.getElementById('btn-product-prev');
+      const btnNext = document.getElementById('btn-product-next');
+
+      if (!tbody) return;
+
+      if (!data || !data.products || data.products.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 32px;">
+              No products found in the uploaded sales data.
+            </td>
+          </tr>
+        `;
+        if (countBadge) countBadge.textContent = '0 products';
+        if (paginationInfo) paginationInfo.textContent = 'Showing 0 of 0';
+        return;
+      }
+
+      // Populate Category Filter dropdown
+      if (catSelect && catSelect.options.length <= 1) {
+        catSelect.innerHTML = `<option value="all">All Categories (${data.products.length} SKUs)</option>` +
+          data.categories.map(c => `<option value="${c.code}" ${c.code === store.productCategoryFilter ? 'selected' : ''}>[${c.code}] ${c.name} (${c.productCount} SKUs)</option>`).join('');
+      }
+
+      // 1. Filter
+      let filtered = data.products;
+      const q = (store.productSearchQuery || '').trim().toLowerCase();
+      if (q) {
+        filtered = filtered.filter(p => {
+          const descMatch = (p.description || '').toLowerCase().includes(q);
+          const catCodeMatch = (p.categoryCode || '').toLowerCase().includes(q);
+          const catNameMatch = getCategoryDisplayName(p.categoryCode).toLowerCase().includes(q);
+          return descMatch || catCodeMatch || catNameMatch;
+        });
+      }
+
+      if (store.productCategoryFilter && store.productCategoryFilter !== 'all') {
+        filtered = filtered.filter(p => p.categoryCode === store.productCategoryFilter);
+      }
+
+      // 2. Sort
+      const col = store.productSortColumn || 'revenue';
+      const asc = Boolean(store.productSortAsc);
+
+      filtered.sort((a, b) => {
+        let valA = a[col];
+        let valB = b[col];
+
+        if (col === 'category') {
+          valA = getCategoryDisplayName(a.categoryCode) + a.categoryCode;
+          valB = getCategoryDisplayName(b.categoryCode) + b.categoryCode;
+        } else if (col === 'revenue') {
+          valA = a.totalRevenue;
+          valB = b.totalRevenue;
+        } else if (col === 'qty') {
+          valA = a.totalQty;
+          valB = b.totalQty;
+        } else if (col === 'avgPrice') {
+          valA = a.avgPrice;
+          valB = b.avgPrice;
+        } else if (col === 'description') {
+          valA = a.description || '';
+          valB = b.description || '';
+        }
+
+        if (typeof valA === 'string') {
+          return asc ? valA.localeCompare(valB, 'th') : valB.localeCompare(valA, 'th');
+        }
+        return asc ? (valA - valB) : (valB - valA);
+      });
+
+      // Update sort icons
+      ['description', 'category', 'qty', 'revenue', 'avgPrice'].forEach(colName => {
+        const iconEl = document.getElementById('sort-icon-' + colName);
+        if (iconEl) {
+          if (colName === col) {
+            iconEl.textContent = asc ? '▲' : '▼';
+            iconEl.style.color = '#38bdf8';
+          } else {
+            iconEl.textContent = '⇅';
+            iconEl.style.color = 'var(--text-muted)';
+          }
+        }
+      });
+
+      // 3. Pagination
+      const pageSize = store.productPageSize || 25;
+      const totalCount = filtered.length;
+      const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+      store.productCurrentPage = Math.min(Math.max(1, store.productCurrentPage || 1), totalPages);
+      const startIdx = (store.productCurrentPage - 1) * pageSize;
+      const endIdx = Math.min(startIdx + pageSize, totalCount);
+      const pageItems = filtered.slice(startIdx, endIdx);
+
+      if (countBadge) {
+        countBadge.textContent = `${totalCount.toLocaleString()} products`;
+      }
+      if (paginationInfo) {
+        paginationInfo.textContent = totalCount > 0 ? `Showing ${startIdx + 1}–${endIdx} of ${totalCount.toLocaleString()} products` : 'Showing 0 of 0';
+      }
+      if (pageNumDisplay) {
+        pageNumDisplay.textContent = `Page ${store.productCurrentPage} of ${totalPages}`;
+      }
+      if (btnPrev) btnPrev.disabled = store.productCurrentPage <= 1;
+      if (btnNext) btnNext.disabled = store.productCurrentPage >= totalPages;
+
+      if (pageItems.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 32px;">
+              No products match search criteria.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = pageItems.map(p => {
+        const catName = getCategoryDisplayName(p.categoryCode);
+        return `
+          <tr>
+            <td style="font-weight: 500; max-width: 380px;">
+              <div style="color: var(--text-primary); font-size: 13px; line-height: 1.4;">${sanitizeText(p.description)}</div>
+              ${p.productCode && p.productCode !== 'NA' ? `<div style="font-size: 11px; color: var(--text-muted); font-family: monospace;">SKU: ${sanitizeText(p.productCode)}</div>` : ''}
+            </td>
+            <td>
+              <span class="brand-tag" style="font-size: 10px; margin-right: 4px;">[${p.categoryCode}]</span>
+              <span style="font-size: 12px; color: var(--text-secondary);">${sanitizeText(catName)}</span>
+            </td>
+            <td style="text-align: right;" class="text-num">
+              <span style="font-weight: 600;">${p.totalQty.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
+              ${p.unit ? `<span style="font-size: 11px; color: var(--text-muted); margin-left: 3px;">${sanitizeText(p.unit)}</span>` : ''}
+            </td>
+            <td style="text-align: right; color: #60a5fa; font-weight: 600;" class="text-num">
+              ${formatLargeTotal(p.totalRevenue)}
+            </td>
+            <td style="text-align: right;" class="text-num">
+              ${formatCurrency(p.avgPrice)}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    /* Product Page Interaction Handlers */
+    function handleProductSearch(val) {
+      store.productSearchQuery = val;
+      store.productCurrentPage = 1;
+      renderProductTable();
+    }
+
+    function handleProductCategoryFilter(catCode) {
+      store.productCategoryFilter = catCode;
+      store.productCurrentPage = 1;
+      renderProductTable();
+    }
+
+    function handleProductSort(column) {
+      if (store.productSortColumn === column) {
+        store.productSortAsc = !store.productSortAsc;
+      } else {
+        store.productSortColumn = column;
+        store.productSortAsc = (column === 'description' || column === 'category');
+      }
+      store.productCurrentPage = 1;
+      renderProductTable();
+    }
+
+    function handleProductPageChange(delta) {
+      store.productCurrentPage += delta;
+      renderProductTable();
+    }
+
+    /**
+     * Milestone M6 Main Page Orchestrator: Product & Category Analysis
+     */
+    function renderProductPage() {
+      const emptyState = document.getElementById('product-empty-state');
+      const content = document.getElementById('product-content');
+
+      if (!emptyState || !content) return;
+
+      if (!store.lineItems || store.lineItems.length === 0) {
+        emptyState.classList.remove('hidden');
+        content.classList.add('hidden');
+        destroyProductCharts();
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+      content.classList.remove('hidden');
+
+      const data = getProductData();
+      if (!data) return;
+
+      // Update header badges
+      const bProd = document.getElementById('badge-total-products');
+      const bCat = document.getElementById('badge-total-categories');
+      const bUnits = document.getElementById('badge-total-items-sold');
+
+      if (bProd) bProd.textContent = `${data.products.length.toLocaleString()} SKUs`;
+      if (bCat) bCat.textContent = `${data.categories.length} Categories`;
+      if (bUnits) bUnits.textContent = `${Math.round(data.grandTotalQty).toLocaleString()} Units Sold`;
+
+      // Render Charts, Heatmap, and Table
+      renderCategoryDonutChart(data);
+      renderProductParetoChart(data);
+      renderCategoryMonthHeatmap(data);
+      renderProductTable(data);
+    }
     function switchTab(tabId) {
       const validTabs = ['overview', 'trend', 'product', 'customer'];
       if (!validTabs.includes(tabId)) tabId = 'overview';
@@ -4488,6 +5542,8 @@ Delivers:
         renderOverviewPage();
       } else if (tabId === 'trend') {
         renderTrendPage();
+      } else if (tabId === 'product') {
+        renderProductPage();
       }
     }
 
@@ -4620,17 +5676,20 @@ Delivers:
         updateAccuracyLog();
         renderOverviewPage();
         renderTrendPage();
+        renderProductPage();
       }
     }
 
     function clearStore() {
       resetStore();
       destroyTrendCharts();
+      destroyProductCharts();
       const input = document.getElementById('file-input');
       if (input) input.value = '';
       renderSummaryTable();
       renderOverviewPage();
       renderTrendPage();
+      renderProductPage();
     }
 
     /* Dropzone Event Handlers */
@@ -5084,8 +6143,57 @@ Delivers:
         emptyTrend
       );
 
+      // Test Case 20: Milestone M6 - Product aggregation, Pareto calculations & Average Unit Price
+      const sampleItems = [
+        { transactionId: 'TX1', seq: 1, categoryCode: '02', description: '02-001 - Metal Sheet Blue', qty: 100, amount: 20000 },
+        { transactionId: 'TX1', seq: 2, categoryCode: '88', description: '88-001 - PU Foam 25mm', qty: 50, amount: 15000 },
+        { transactionId: 'TX2', seq: 1, categoryCode: '02', description: '02-001 - Metal Sheet Blue', qty: 50, amount: 10000 },
+        { transactionId: 'TX2', seq: 2, categoryCode: '04', description: '04-001 - Flashing Edge', qty: 20, amount: 5000 }
+      ];
+      const prevItems = store.lineItems;
+      store.lineItems = sampleItems;
+      const m6Data = getProductData();
+      store.lineItems = prevItems; // Restore store
+
+      assert(
+        'M6 Aggregation: Groups line items into distinct products with correct revenue, qty, and avg unit price',
+        m6Data !== null &&
+        m6Data.products.length === 3 &&
+        m6Data.products[0].description === '02-001 - Metal Sheet Blue' &&
+        m6Data.products[0].totalRevenue === 30000 &&
+        m6Data.products[0].totalQty === 150 &&
+        m6Data.products[0].avgPrice === 200 &&
+        m6Data.top15Products.length === 3 &&
+        Math.round(m6Data.top15Products[0].cumulativePct) === 60,
+        m6Data ? m6Data.products[0] : null
+      );
+
+      // Test Case 21: Milestone M6 - Heatmap color scale function from CONFIG
+      const colorZero = CONFIG.getHeatmapColor(0, 10000);
+      const colorHalf = CONFIG.getHeatmapColor(5000, 10000);
+      const colorFull = CONFIG.getHeatmapColor(10000, 10000);
+      assert(
+        'M6 CONFIG: Shared getHeatmapColor returns appropriate rgba gradient strings across ratios',
+        typeof colorZero === 'string' &&
+        typeof colorHalf === 'string' &&
+        typeof colorFull === 'string' &&
+        colorHalf.includes('rgba') &&
+        colorFull.includes('rgba'),
+        { colorZero, colorHalf, colorFull }
+      );
+
+      // Test Case 22: Milestone M6 - Category 02 and 88 mapping verification
+      const cat02Name = getCategoryDisplayName('02');
+      const cat88Name = getCategoryDisplayName('88');
+      assert(
+        'M6 Category Mapping: Category 02 maps to Roofing Sheet and 88 maps to PU Foam',
+        (cat02Name.includes('Roofing Sheet') || cat02Name.includes('แผ่นหลังคา')) &&
+        cat88Name.includes('PU Foam'),
+        { cat02Name, cat88Name }
+      );
+
       const allPassed = results.every(r => r.passed);
-      console.log(`=== M5 runChecks() finished: ${results.filter(r => r.passed).length}/${results.length} PASSED ===`);
+      console.log(`=== M6 runChecks() finished: ${results.filter(r => r.passed).length}/${results.length} PASSED ===`);
       console.groupEnd();
 
       // Update UI indicator
