@@ -1224,6 +1224,23 @@ Delivers:
       margin-left: 4px;
     }
 
+    /* -------------------------------------------------------------
+       MILESTONE M7: CUSTOMER & CASH FLOW PAGE STYLES
+       ------------------------------------------------------------- */
+    .customer-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      width: 100%;
+    }
+
+    .customer-content {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      width: 100%;
+    }
+
     /* Footer */
     .app-footer {
       border-top: 1px solid var(--border-subtle);
@@ -2001,20 +2018,211 @@ Delivers:
         </div>
       </section>
 
-      <!-- Page 4: Customer & Cash Flow Panel Shell -->
-      <section id="panel-customer" class="page-panel hidden">
-        <span class="page-panel-badge">Milestone M7 Preview</span>
-        <h2 class="page-panel-title">Customer, Team &amp; Cash Flow</h2>
-        <p class="page-panel-desc">
-          This panel will feature the salesperson leaderboard, top-20 customer cash vs. credit split,
-          deposits received by month, and upcoming due deposit tracking once M7 is implemented.
-        </p>
+      <!-- Page 4: Customer, Team & Cash Flow Panel (Milestone M7) -->
+      <section id="panel-customer" class="customer-panel hidden">
+        <!-- Friendly Empty State -->
+        <div id="customer-empty-state" class="overview-empty-state">
+          <div class="overview-empty-icon">👥</div>
+          <h2 class="overview-empty-title">Upload your sales &amp; deposit reports to see customer &amp; cash flow intelligence</h2>
+          <p class="overview-empty-desc">
+            Drag and drop sales reports (Cash Sales, Credit Sales, Deposits Received) into the dropzone above to view the salesperson performance leaderboard, top 20 customer cash vs. credit breakdown, cash-to-credit split, monthly deposits tracking, and upcoming due deposit obligations.
+          </p>
+          <button type="button" class="btn-primary" onclick="triggerFileInput()" style="display: inline-flex; align-items: center; gap: 8px;">
+            <span>📁 Upload Reports</span>
+          </button>
+        </div>
+
+        <!-- Populated Customer & Cash Flow Dashboard Content -->
+        <div id="customer-content" class="customer-content hidden">
+          <!-- Header Bar -->
+          <div class="overview-header-bar">
+            <div>
+              <span class="overview-page-badge">Commercial Intelligence</span>
+              <h1 class="overview-title">Customer Accounts, Sales Reps &amp; Cash Flow</h1>
+              <p class="overview-subtitle">
+                Salesperson performance leaderboard, top 20 customer credit vs. cash breakdown, and deposit liabilities tracking
+              </p>
+            </div>
+            <!-- Quick Summary Badges -->
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <span class="brand-tag" id="badge-total-customers">0 Accounts</span>
+              <span class="brand-tag" id="badge-total-reps">0 Sales Reps</span>
+              <span class="brand-tag" id="badge-total-deposits">0 Deposits</span>
+            </div>
+          </div>
+
+          <!-- Top Row KPI Cards -->
+          <div class="overview-kpi-grid">
+            <div class="overview-kpi-card highlight-accent">
+              <div class="kpi-card-header">
+                <span class="kpi-card-label">Cash Sales</span>
+                <span class="kpi-card-tag" style="color: #34d399; border-color: rgba(52, 211, 153, 0.3);">Collected</span>
+              </div>
+              <div class="kpi-card-value" id="cust-kpi-cash-rev" style="color: #34d399;">฿0</div>
+              <div class="kpi-card-subtext" id="cust-kpi-cash-pct">0% of total revenue</div>
+              <div class="kpi-card-detail">Immediate cash collected from counter and field sales</div>
+            </div>
+
+            <div class="overview-kpi-card">
+              <div class="kpi-card-header">
+                <span class="kpi-card-label">Credit Sales</span>
+                <span class="kpi-card-tag" style="color: #60a5fa; border-color: rgba(96, 165, 250, 0.3);">Receivables</span>
+              </div>
+              <div class="kpi-card-value" id="cust-kpi-credit-rev" style="color: #60a5fa;">฿0</div>
+              <div class="kpi-card-subtext" id="cust-kpi-credit-pct">0% of total revenue</div>
+              <div class="kpi-card-detail">Invoiced sales issued with credit payment terms</div>
+            </div>
+
+            <div class="overview-kpi-card">
+              <div class="kpi-card-header">
+                <span class="kpi-card-label">Cash : Credit Ratio</span>
+                <span class="kpi-card-tag">Collection Mix</span>
+              </div>
+              <div class="kpi-card-value" id="cust-kpi-ratio" style="color: #fbbf24;">-</div>
+              <div class="kpi-card-subtext" id="cust-kpi-ratio-subtext">Cash volume multiplier</div>
+              <div class="kpi-card-detail">Dominance of immediate cash liquidity vs credit terms</div>
+            </div>
+
+            <div class="overview-kpi-card">
+              <div class="kpi-card-header">
+                <span class="kpi-card-label">Outstanding Deposits</span>
+                <span class="kpi-card-tag" style="color: #f87171; border-color: rgba(248, 113, 113, 0.3);">Liability</span>
+              </div>
+              <div class="kpi-card-value" id="cust-kpi-outstanding-dep" style="color: #f87171;">฿0</div>
+              <div class="kpi-card-subtext" id="cust-kpi-outstanding-dep-sub">0 open / 0 total</div>
+              <div class="kpi-card-detail">Unapplied customer advance deposits awaiting fulfillment</div>
+            </div>
+          </div>
+
+          <!-- Charts Row 1: Salesperson Leaderboard (Bar) & Cash vs Credit (Donut) -->
+          <div class="overview-charts-grid">
+            <!-- 1. Bar chart: total revenue per salesperson code (leaderboard, sorted descending) -->
+            <div class="overview-chart-card">
+              <div class="chart-card-header">
+                <div>
+                  <h3 class="chart-card-title">Salesperson Performance Leaderboard</h3>
+                  <div class="chart-card-subtitle">
+                    Total revenue generated per salesperson code (sorted descending)
+                  </div>
+                </div>
+                <span class="brand-tag" id="badge-top-salesperson">Top Rep: -</span>
+              </div>
+
+              <div class="chart-canvas-container" style="height: 320px;">
+                <canvas id="chart-salesperson-bar"></canvas>
+              </div>
+            </div>
+
+            <!-- 3. Donut: total cash sales vs total credit sales -->
+            <div class="overview-chart-card">
+              <div class="chart-card-header">
+                <div>
+                  <h3 class="chart-card-title">Cash Sales vs. Credit Sales</h3>
+                  <div class="chart-card-subtitle">
+                    Proportion of immediate cash collections versus credit receivables
+                  </div>
+                </div>
+                <span class="brand-tag">Payment Mix</span>
+              </div>
+
+              <div class="chart-canvas-container" style="height: 290px; display: flex; align-items: center; justify-content: center;">
+                <canvas id="chart-cash-credit-donut"></canvas>
+              </div>
+
+              <div class="category-note-box" style="margin-top: 10px;">
+                <span style="font-weight: 600; color: #38bdf8;">ⓘ Insight:</span>
+                <span id="cash-credit-insight-text">Cash sales account for the vast majority (~20x) of total business revenue.</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Table 2: Top 20 Customers by Total Revenue with Cash vs Credit Split -->
+          <div class="overview-table-card">
+            <div class="table-card-header">
+              <div>
+                <h3 class="chart-card-title">Top 20 Customers by Total Revenue</h3>
+                <div class="chart-card-subtitle">
+                  Highest-value client accounts with individual Cash vs. Credit split (credit customers matched by name)
+                </div>
+              </div>
+              <span class="brand-tag" id="badge-top20-count">Top 20 Accounts</span>
+            </div>
+
+            <div class="table-container" style="max-height: 480px; overflow-y: auto;">
+              <table class="summary-table">
+                <thead>
+                  <tr>
+                    <th style="width: 50px; text-align: center;">Rank</th>
+                    <th style="text-align: left;">Customer Name</th>
+                    <th style="text-align: left; width: 110px;">Code</th>
+                    <th style="text-align: right; width: 140px;">Cash Sales (฿)</th>
+                    <th style="text-align: right; width: 140px;">Credit Sales (฿)</th>
+                    <th style="text-align: right; width: 150px;">Total Revenue (฿)</th>
+                    <th style="text-align: right; width: 100px;">Share (%)</th>
+                  </tr>
+                </thead>
+                <tbody id="customer-top-table-body">
+                  <!-- Dynamically populated top 20 rows -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Chart 4: Deposits Received by Month & Running Total Outstanding Balance -->
+          <div class="overview-chart-card">
+            <div class="chart-card-header">
+              <div>
+                <h3 class="chart-card-title">Deposits Received &amp; Running Outstanding Balance</h3>
+                <div class="chart-card-subtitle">
+                  Monthly customer deposits received (bars) vs. cumulative outstanding unapplied deposit balance (line)
+                </div>
+              </div>
+              <span class="brand-tag">Deposits &amp; Advances</span>
+            </div>
+
+            <div class="chart-canvas-container" style="height: 320px;">
+              <canvas id="chart-deposits-monthly"></canvas>
+            </div>
+          </div>
+
+          <!-- Table 5: Deposits with an Upcoming Due Date -->
+          <div class="overview-table-card">
+            <div class="table-card-header">
+              <div>
+                <h3 class="chart-card-title">Deposits with Upcoming Due Dates</h3>
+                <div class="chart-card-subtitle">
+                  Customer advance orders with scheduled fulfillment/due dates, sorted soonest first
+                </div>
+              </div>
+              <span class="brand-tag" id="badge-upcoming-deps-count">0 Due Deposits</span>
+            </div>
+
+            <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+              <table class="summary-table">
+                <thead>
+                  <tr>
+                    <th style="text-align: left; width: 120px;">Due Date</th>
+                    <th style="text-align: left;">Customer Name</th>
+                    <th style="text-align: left; width: 110px;">Customer Code</th>
+                    <th style="text-align: left; width: 120px;">Deposit Doc #</th>
+                    <th style="text-align: right; width: 140px;">Total Received (฿)</th>
+                    <th style="text-align: right; width: 140px;">Outstanding (฿)</th>
+                    <th style="text-align: center; width: 120px;">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="deposits-upcoming-table-body">
+                  <!-- Dynamically populated upcoming deposit rows -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </section>
     </main>
 
     <!-- Footer -->
     <footer class="app-footer">
-      <span>Sales Intelligence Dashboard (Track A) • Milestone M6: Product &amp; Category</span>
+      <span>Sales Intelligence Dashboard (Track A) • Milestone M7: Customer &amp; Cash Flow</span>
       <span id="footer-check-info">Self-Checks: All green</span>
     </footer>
   </div>
@@ -5511,6 +5719,677 @@ Delivers:
       renderCategoryMonthHeatmap(data);
       renderProductTable(data);
     }
+
+    /* =============================================================
+       MILESTONE M7: CUSTOMER, TEAM & CASH FLOW MODULE
+       ============================================================= */
+    let salespersonBarChart = null;
+    let cashCreditDonutChart = null;
+    let depositsMonthlyChart = null;
+
+    function destroyCustomerCharts() {
+      if (salespersonBarChart) {
+        salespersonBarChart.destroy();
+        salespersonBarChart = null;
+      }
+      if (cashCreditDonutChart) {
+        cashCreditDonutChart.destroy();
+        cashCreditDonutChart = null;
+      }
+      if (depositsMonthlyChart) {
+        depositsMonthlyChart.destroy();
+        depositsMonthlyChart = null;
+      }
+    }
+
+    /**
+     * Pure calculation function: Extracts and aggregates salesperson performance,
+     * top customer accounts with cash-vs-credit split (credit customers matched by name),
+     * cash vs credit proportion, deposits by month, and upcoming due deposits.
+     * Takes transactions and deposits arrays without DOM access.
+     */
+    function getCustomerData(txList, depList) {
+      const transactions = txList !== undefined ? txList : (store.transactions || []);
+      const deposits = depList !== undefined ? depList : (store.deposits || []);
+
+      if ((!transactions || transactions.length === 0) && (!deposits || deposits.length === 0)) {
+        return null;
+      }
+
+      // 1. Salesperson Leaderboard & Cash vs Credit totals
+      const repMap = new Map();
+      let totalCashRev = 0;
+      let totalCreditRev = 0;
+
+      for (const tx of (transactions || [])) {
+        const rawCode = trimSalespersonCode(tx.salespersonCode);
+        const repCode = rawCode || 'Unassigned';
+        const amount = Number(tx.grandTotal) || 0;
+        const isCash = tx.type === 'cash';
+
+        if (isCash) totalCashRev += amount;
+        else totalCreditRev += amount;
+
+        if (!repMap.has(repCode)) {
+          repMap.set(repCode, {
+            salespersonCode: repCode,
+            totalRevenue: 0,
+            cashRevenue: 0,
+            creditRevenue: 0,
+            txCount: 0
+          });
+        }
+        const rObj = repMap.get(repCode);
+        rObj.totalRevenue += amount;
+        rObj.txCount++;
+        if (isCash) rObj.cashRevenue += amount;
+        else rObj.creditRevenue += amount;
+      }
+
+      const grandTotalRevenue = totalCashRev + totalCreditRev;
+
+      const salespersonLeaderboard = Array.from(repMap.values()).map(r => {
+        const pct = grandTotalRevenue > 0 ? (r.totalRevenue / grandTotalRevenue) * 100 : 0;
+        return { ...r, pct };
+      });
+      // Sort descending by total revenue
+      salespersonLeaderboard.sort((a, b) => b.totalRevenue - a.totalRevenue);
+
+      // 2. Customer Aggregation (Credit customers matched by customerName per schema.md section 3)
+      const custMap = new Map();
+      for (const tx of (transactions || [])) {
+        const rawName = (tx.customerName || '').trim() || 'Unknown Customer';
+        const amount = Number(tx.grandTotal) || 0;
+        const isCash = tx.type === 'cash';
+
+        if (!custMap.has(rawName)) {
+          custMap.set(rawName, {
+            customerName: rawName,
+            customerCode: tx.customerCode ? String(tx.customerCode).trim() : null,
+            totalRevenue: 0,
+            cashRevenue: 0,
+            creditRevenue: 0,
+            txCount: 0
+          });
+        }
+        const cObj = custMap.get(rawName);
+        cObj.totalRevenue += amount;
+        cObj.txCount++;
+        if (isCash) cObj.cashRevenue += amount;
+        else cObj.creditRevenue += amount;
+
+        if (!cObj.customerCode && tx.customerCode) {
+          cObj.customerCode = String(tx.customerCode).trim();
+        }
+      }
+
+      // Check deposits to enrich customer codes if known
+      for (const dep of (deposits || [])) {
+        const rawName = (dep.customerName || '').trim();
+        if (rawName && custMap.has(rawName)) {
+          const cObj = custMap.get(rawName);
+          if (!cObj.customerCode && dep.customerCode) {
+            cObj.customerCode = String(dep.customerCode).trim();
+          }
+        }
+      }
+
+      const allCustomers = Array.from(custMap.values()).map(c => {
+        const pct = grandTotalRevenue > 0 ? (c.totalRevenue / grandTotalRevenue) * 100 : 0;
+        return { ...c, pct };
+      });
+      allCustomers.sort((a, b) => b.totalRevenue - a.totalRevenue);
+
+      const top20Customers = allCustomers.slice(0, 20);
+
+      // 3. Cash vs Credit Proportion
+      const cashVsCredit = {
+        cashRevenue: totalCashRev,
+        creditRevenue: totalCreditRev,
+        totalRevenue: grandTotalRevenue,
+        cashPct: grandTotalRevenue > 0 ? (totalCashRev / grandTotalRevenue) * 100 : 0,
+        creditPct: grandTotalRevenue > 0 ? (totalCreditRev / grandTotalRevenue) * 100 : 0,
+        ratio: totalCreditRev > 0 ? (totalCashRev / totalCreditRev) : (totalCashRev > 0 ? Infinity : 0)
+      };
+
+      // 4. Deposits by Month & Running Outstanding Balance
+      const depMonthMap = new Map();
+      let totalDepositsReceived = 0;
+      let totalOutstandingDeposit = 0;
+      let appliedDepositsCount = 0;
+
+      for (const dep of (deposits || [])) {
+        const amount = Number(dep.total) || 0;
+        const out = Number(dep.outstanding) || 0;
+        totalDepositsReceived += amount;
+        totalOutstandingDeposit += out;
+        if (dep.fullyApplied || out === 0) {
+          appliedDepositsCount++;
+        }
+
+        const m = dep.date ? dep.date.substring(0, 7) : 'Unknown';
+        if (!depMonthMap.has(m)) {
+          depMonthMap.set(m, {
+            month: m,
+            totalReceived: 0,
+            totalOutstanding: 0,
+            depositCount: 0
+          });
+        }
+        const mObj = depMonthMap.get(m);
+        mObj.totalReceived += amount;
+        mObj.totalOutstanding += out;
+        mObj.depositCount++;
+      }
+
+      // Sort distinct months chronologically
+      const depMonths = Array.from(depMonthMap.keys()).filter(m => m !== 'Unknown').sort();
+      if (depMonthMap.has('Unknown')) depMonths.push('Unknown');
+
+      let runningOutstandingSum = 0;
+      const depositsByMonth = depMonths.map(m => {
+        const mObj = depMonthMap.get(m);
+        runningOutstandingSum += mObj.totalOutstanding;
+        return {
+          month: m,
+          monthLabel: m === 'Unknown' ? 'Unknown' : formatMonthDisplay(m),
+          totalReceived: mObj.totalReceived,
+          totalOutstanding: mObj.totalOutstanding,
+          runningOutstanding: runningOutstandingSum,
+          depositCount: mObj.depositCount
+        };
+      });
+
+      // 5. Deposits with an upcoming due date (sorted soonest first)
+      const depositsWithDueDate = (deposits || [])
+        .filter(d => d.dueDate != null && String(d.dueDate).trim() !== '')
+        .slice();
+
+      depositsWithDueDate.sort((a, b) => {
+        return String(a.dueDate).localeCompare(String(b.dueDate));
+      });
+
+      return {
+        salespersonLeaderboard,
+        top20Customers,
+        allCustomersCount: allCustomers.length,
+        cashVsCredit,
+        depositsByMonth,
+        totalDepositsReceived,
+        totalOutstandingDeposit,
+        appliedDepositsCount,
+        totalDepositsCount: (deposits || []).length,
+        upcomingDeposits: depositsWithDueDate
+      };
+    }
+
+    /**
+     * Requirement 1: Bar chart: total revenue per salesperson code (leaderboard, sorted descending).
+     */
+    function renderSalespersonBarChart(data) {
+      const canvas = document.getElementById('chart-salesperson-bar');
+      const badge = document.getElementById('badge-top-salesperson');
+      if (!canvas || !window.Chart) return;
+
+      if (salespersonBarChart) {
+        salespersonBarChart.destroy();
+        salespersonBarChart = null;
+      }
+
+      if (!data || !data.salespersonLeaderboard || data.salespersonLeaderboard.length === 0) {
+        if (badge) badge.textContent = 'Top Rep: -';
+        return;
+      }
+
+      const board = data.salespersonLeaderboard;
+      const topRep = board[0];
+      if (badge && topRep) {
+        badge.textContent = `Top: Rep ${topRep.salespersonCode} (${formatLargeTotal(topRep.totalRevenue)})`;
+      }
+
+      const labels = board.map(r => r.salespersonCode === 'Unassigned' ? 'Unassigned' : `Rep ${r.salespersonCode}`);
+      const revenues = board.map(r => Math.round(r.totalRevenue));
+
+      // Highlight the #1 top rep in bright cyan/blue
+      const bgColors = board.map((r, idx) => {
+        return idx === 0 ? 'rgba(56, 189, 248, 0.85)' : 'rgba(59, 130, 246, 0.65)';
+      });
+      const borderColors = board.map((r, idx) => {
+        return idx === 0 ? '#38bdf8' : '#3b82f6';
+      });
+
+      salespersonBarChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Total Revenue (฿)',
+            data: revenues,
+            backgroundColor: bgColors,
+            borderColor: borderColors,
+            borderWidth: 1,
+            borderRadius: 4
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              grid: { color: 'rgba(51, 65, 85, 0.35)' },
+              ticks: {
+                color: '#94a3b8',
+                font: { size: 11 },
+                callback: function(val) {
+                  return formatCompactBaht(val);
+                }
+              }
+            },
+            y: {
+              grid: { display: false },
+              ticks: {
+                color: '#f8fafc',
+                font: { size: 11, weight: 'bold' }
+              }
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: function(items) {
+                  if (!items.length) return '';
+                  const idx = items[0].dataIndex;
+                  const item = board[idx];
+                  return item ? `Sales Rep: ${item.salespersonCode} (${item.txCount.toLocaleString()} transactions)` : '';
+                },
+                label: function(context) {
+                  const val = context.raw || 0;
+                  const idx = context.dataIndex;
+                  const share = board[idx] ? board[idx].pct.toFixed(1) : '0';
+                  return ` Revenue: ${formatLargeTotal(val)} (${share}% share)`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    /**
+     * Requirement 3: Donut chart of total cash sales vs total credit sales.
+     */
+    function renderCashCreditDonutChart(data) {
+      const canvas = document.getElementById('chart-cash-credit-donut');
+      const insight = document.getElementById('cash-credit-insight-text');
+      if (!canvas || !window.Chart) return;
+
+      if (cashCreditDonutChart) {
+        cashCreditDonutChart.destroy();
+        cashCreditDonutChart = null;
+      }
+
+      if (!data || !data.cashVsCredit) return;
+
+      const cData = data.cashVsCredit;
+      const grandTotal = cData.totalRevenue || 1;
+
+      if (insight) {
+        const ratioTxt = cData.ratio === Infinity
+          ? 'all cash'
+          : `~${cData.ratio.toFixed(1)}x`;
+        insight.textContent = `Cash sales account for ${cData.cashPct.toFixed(1)}% of revenue (${ratioTxt} credit sales).`;
+      }
+
+      cashCreditDonutChart = new Chart(canvas, {
+        type: 'doughnut',
+        data: {
+          labels: ['Cash Sales', 'Credit Sales'],
+          datasets: [{
+            data: [Math.round(cData.cashRevenue), Math.round(cData.creditRevenue)],
+            backgroundColor: ['#10b981', '#3b82f6'],
+            borderColor: '#1e293b',
+            borderWidth: 2,
+            hoverOffset: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '60%',
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: {
+                boxWidth: 12,
+                boxHeight: 12,
+                padding: 14,
+                color: '#94a3b8',
+                font: { size: 12 },
+                generateLabels: function(chart) {
+                  const d = chart.data;
+                  if (d.labels.length && d.datasets.length) {
+                    return d.labels.map((label, i) => {
+                      const val = d.datasets[0].data[i] || 0;
+                      const pct = ((val / grandTotal) * 100).toFixed(1);
+                      return {
+                        text: `${label}: ${formatLargeTotal(val)} (${pct}%)`,
+                        fillStyle: d.datasets[0].backgroundColor[i],
+                        strokeStyle: d.datasets[0].borderColor,
+                        lineWidth: 1,
+                        hidden: !chart.isDatasetVisible(0),
+                        index: i
+                      };
+                    });
+                  }
+                  return [];
+                }
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  const val = context.raw || 0;
+                  const pct = ((val / grandTotal) * 100).toFixed(1);
+                  return ` ${context.label}: ${formatLargeTotal(val)} (${pct}%)`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    /**
+     * Requirement 2: Table: top 20 customers by total revenue, with a cash-vs-credit ฿ split column each
+     * (credit customers matched by name per schema.md section 3).
+     */
+    function renderTopCustomersTable(data) {
+      const tbody = document.getElementById('customer-top-table-body');
+      const badge = document.getElementById('badge-top20-count');
+      if (!tbody) return;
+
+      if (!data || !data.top20Customers || data.top20Customers.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 32px;">
+              No customer transaction records found. Ingest sales files to populate.
+            </td>
+          </tr>
+        `;
+        if (badge) badge.textContent = '0 Accounts';
+        return;
+      }
+
+      if (badge) badge.textContent = `Top ${data.top20Customers.length} Accounts`;
+
+      tbody.innerHTML = data.top20Customers.map((c, idx) => {
+        const rank = idx + 1;
+        const rankColor = rank === 1 ? '#fbbf24' : (rank === 2 ? '#cbd5e1' : (rank === 3 ? '#d97706' : 'var(--text-muted)'));
+        return `
+          <tr>
+            <td style="text-align: center; font-weight: 700; color: ${rankColor}; font-size: 13px;">
+              #${rank}
+            </td>
+            <td style="font-weight: 500; max-width: 320px;">
+              <div style="color: var(--text-primary); font-size: 13px; line-height: 1.4;">${sanitizeText(c.customerName)}</div>
+              <div style="font-size: 11px; color: var(--text-muted);">${c.txCount.toLocaleString()} invoice${c.txCount > 1 ? 's' : ''}</div>
+            </td>
+            <td>
+              ${c.customerCode ? `<span class="brand-tag" style="font-size: 11px;">${sanitizeText(c.customerCode)}</span>` : '<span style="color: var(--text-muted);">-</span>'}
+            </td>
+            <td style="text-align: right; color: #34d399; font-weight: 600;" class="text-num">
+              ${c.cashRevenue > 0 ? formatLargeTotal(c.cashRevenue) : '<span style="color: var(--text-muted); font-weight: normal;">฿0</span>'}
+            </td>
+            <td style="text-align: right; color: #60a5fa; font-weight: 600;" class="text-num">
+              ${c.creditRevenue > 0 ? formatLargeTotal(c.creditRevenue) : '<span style="color: var(--text-muted); font-weight: normal;">฿0</span>'}
+            </td>
+            <td style="text-align: right; font-weight: 700; color: var(--text-primary);" class="text-num">
+              ${formatLargeTotal(c.totalRevenue)}
+            </td>
+            <td style="text-align: right; color: var(--text-secondary); font-size: 12px;" class="text-num">
+              ${c.pct.toFixed(1)}%
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    /**
+     * Requirement 4: Chart: deposits received by month (bar), with the running total outstanding deposit balance shown as a line.
+     */
+    function renderDepositsMonthlyChart(data) {
+      const canvas = document.getElementById('chart-deposits-monthly');
+      if (!canvas || !window.Chart) return;
+
+      if (depositsMonthlyChart) {
+        depositsMonthlyChart.destroy();
+        depositsMonthlyChart = null;
+      }
+
+      if (!data || !data.depositsByMonth || data.depositsByMonth.length === 0) return;
+
+      const months = data.depositsByMonth;
+      const labels = months.map(m => m.monthLabel);
+      const receivedData = months.map(m => Math.round(m.totalReceived));
+      const runningOutData = months.map(m => Math.round(m.runningOutstanding));
+
+      depositsMonthlyChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              type: 'line',
+              label: 'Cumulative Outstanding Balance (฿)',
+              data: runningOutData,
+              yAxisID: 'y',
+              borderColor: '#f43f5e',
+              backgroundColor: 'rgba(244, 63, 94, 0.15)',
+              borderWidth: 2.5,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              pointBackgroundColor: '#f43f5e',
+              tension: 0.2,
+              order: 1
+            },
+            {
+              type: 'bar',
+              label: 'Deposits Received (฿)',
+              data: receivedData,
+              yAxisID: 'y',
+              backgroundColor: 'rgba(16, 185, 129, 0.75)',
+              borderColor: '#10b981',
+              borderWidth: 1,
+              borderRadius: 4,
+              order: 2
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: 'index',
+            intersect: false
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(51, 65, 85, 0.25)' },
+              ticks: {
+                color: '#94a3b8',
+                font: { size: 11 }
+              }
+            },
+            y: {
+              beginAtZero: true,
+              grid: { color: 'rgba(51, 65, 85, 0.35)' },
+              ticks: {
+                color: '#94a3b8',
+                font: { size: 11 },
+                callback: function(val) {
+                  return formatCompactBaht(val);
+                }
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: {
+                boxWidth: 12,
+                color: '#94a3b8',
+                font: { size: 11 }
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return ` ${context.dataset.label}: ${formatLargeTotal(context.raw)}`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    /**
+     * Requirement 5: Table: deposits with an upcoming due date (sort soonest first),
+     * showing customer name, amount outstanding, and due date.
+     */
+    function renderUpcomingDepositsTable(data) {
+      const tbody = document.getElementById('deposits-upcoming-table-body');
+      const badge = document.getElementById('badge-upcoming-deps-count');
+      if (!tbody) return;
+
+      if (!data || !data.upcomingDeposits || data.upcomingDeposits.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 32px;">
+              No deposits with scheduled due dates found.
+            </td>
+          </tr>
+        `;
+        if (badge) badge.textContent = '0 Due Deposits';
+        return;
+      }
+
+      if (badge) badge.textContent = `${data.upcomingDeposits.length} Due Deposits`;
+
+      const todayIso = new Date().toISOString().substring(0, 10);
+
+      tbody.innerHTML = data.upcomingDeposits.map(d => {
+        const isSettled = d.outstanding <= 0 || d.fullyApplied;
+        const isOverdue = !isSettled && d.dueDate && d.dueDate < todayIso;
+
+        const statusBadge = isSettled
+          ? '<span class="badge-report-type badge-cash" style="background: rgba(16, 185, 129, 0.15); color: #34d399;">Settled</span>'
+          : isOverdue
+          ? '<span class="badge-report-type badge-unrecognized" style="background: rgba(239, 68, 68, 0.15); color: #f87171;">Past Due</span>'
+          : '<span class="badge-report-type badge-credit" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa;">Scheduled</span>';
+
+        return `
+          <tr>
+            <td style="font-weight: 600; color: #fbbf24; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px;">
+              ${d.dueDate ? formatDateDisplay(d.dueDate) : '-'}
+            </td>
+            <td style="font-weight: 500; max-width: 260px;">
+              <div style="color: var(--text-primary); font-size: 13px;">${sanitizeText(d.customerName)}</div>
+            </td>
+            <td>
+              ${d.customerCode ? `<span class="brand-tag" style="font-size: 11px;">${sanitizeText(d.customerCode)}</span>` : '<span style="color: var(--text-muted);">-</span>'}
+            </td>
+            <td style="font-family: monospace; font-size: 12px; color: var(--text-secondary);">
+              ${sanitizeText(d.docNo)}
+            </td>
+            <td style="text-align: right; color: var(--text-secondary);" class="text-num">
+              ${formatLargeTotal(d.total)}
+            </td>
+            <td style="text-align: right; color: ${d.outstanding > 0 ? '#f87171' : '#34d399'}; font-weight: 700;" class="text-num">
+              ${formatLargeTotal(d.outstanding)}
+            </td>
+            <td style="text-align: center;">
+              ${statusBadge}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    /**
+     * Milestone M7 Main Page Orchestrator: Customer & Cash Flow Analysis
+     */
+    function renderCustomerPage() {
+      const emptyState = document.getElementById('customer-empty-state');
+      const content = document.getElementById('customer-content');
+
+      if (!emptyState || !content) return;
+
+      const hasTransactions = store.transactions && store.transactions.length > 0;
+      const hasDeposits = store.deposits && store.deposits.length > 0;
+
+      if (!hasTransactions && !hasDeposits) {
+        emptyState.classList.remove('hidden');
+        content.classList.add('hidden');
+        destroyCustomerCharts();
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+      content.classList.remove('hidden');
+
+      const data = getCustomerData();
+      if (!data) return;
+
+      // Update header badges
+      const bCust = document.getElementById('badge-total-customers');
+      const bReps = document.getElementById('badge-total-reps');
+      const bDeps = document.getElementById('badge-total-deposits');
+
+      if (bCust) bCust.textContent = `${data.allCustomersCount.toLocaleString()} Accounts`;
+      if (bReps) bReps.textContent = `${data.salespersonLeaderboard.length} Sales Reps`;
+      if (bDeps) bDeps.textContent = `${data.totalDepositsCount.toLocaleString()} Deposits`;
+
+      // Update top KPI cards
+      const kpiCashRev = document.getElementById('cust-kpi-cash-rev');
+      const kpiCashPct = document.getElementById('cust-kpi-cash-pct');
+      const kpiCreditRev = document.getElementById('cust-kpi-credit-rev');
+      const kpiCreditPct = document.getElementById('cust-kpi-credit-pct');
+      const kpiRatio = document.getElementById('cust-kpi-ratio');
+      const kpiRatioSub = document.getElementById('cust-kpi-ratio-subtext');
+      const kpiOutDep = document.getElementById('cust-kpi-outstanding-dep');
+      const kpiOutDepSub = document.getElementById('cust-kpi-outstanding-dep-sub');
+
+      if (kpiCashRev) kpiCashRev.textContent = formatLargeTotal(data.cashVsCredit.cashRevenue);
+      if (kpiCashPct) kpiCashPct.textContent = `${data.cashVsCredit.cashPct.toFixed(1)}% of total revenue`;
+      if (kpiCreditRev) kpiCreditRev.textContent = formatLargeTotal(data.cashVsCredit.creditRevenue);
+      if (kpiCreditPct) kpiCreditPct.textContent = `${data.cashVsCredit.creditPct.toFixed(1)}% of total revenue`;
+      if (kpiRatio) {
+        kpiRatio.textContent = data.cashVsCredit.ratio === Infinity
+          ? '100% Cash'
+          : `${data.cashVsCredit.ratio.toFixed(1)}x`;
+      }
+      if (kpiRatioSub) {
+        kpiRatioSub.textContent = data.cashVsCredit.ratio === Infinity
+          ? 'Zero credit receivables'
+          : `Cash : Credit = ${data.cashVsCredit.ratio.toFixed(1)} : 1`;
+      }
+      if (kpiOutDep) kpiOutDep.textContent = formatLargeTotal(data.totalOutstandingDeposit);
+      if (kpiOutDepSub) {
+        const openDeps = data.totalDepositsCount - data.appliedDepositsCount;
+        kpiOutDepSub.textContent = `${openDeps.toLocaleString()} open / ${data.totalDepositsCount.toLocaleString()} total`;
+      }
+
+      // Render Charts & Tables
+      renderSalespersonBarChart(data);
+      renderCashCreditDonutChart(data);
+      renderTopCustomersTable(data);
+      renderDepositsMonthlyChart(data);
+      renderUpcomingDepositsTable(data);
+    }
+
     function switchTab(tabId) {
       const validTabs = ['overview', 'trend', 'product', 'customer'];
       if (!validTabs.includes(tabId)) tabId = 'overview';
@@ -5544,6 +6423,8 @@ Delivers:
         renderTrendPage();
       } else if (tabId === 'product') {
         renderProductPage();
+      } else if (tabId === 'customer') {
+        renderCustomerPage();
       }
     }
 
@@ -5677,6 +6558,7 @@ Delivers:
         renderOverviewPage();
         renderTrendPage();
         renderProductPage();
+        renderCustomerPage();
       }
     }
 
@@ -5684,12 +6566,14 @@ Delivers:
       resetStore();
       destroyTrendCharts();
       destroyProductCharts();
+      destroyCustomerCharts();
       const input = document.getElementById('file-input');
       if (input) input.value = '';
       renderSummaryTable();
       renderOverviewPage();
       renderTrendPage();
       renderProductPage();
+      renderCustomerPage();
     }
 
     /* Dropzone Event Handlers */
@@ -6192,8 +7076,80 @@ Delivers:
         { cat02Name, cat88Name }
       );
 
+      // --- Milestone M7 Self-Tests (Customer & Cash Flow Analytics) ---
+      // Test Case 23: Salesperson leaderboard (04 top), customer matching by name, ~20x cash:credit ratio
+      const sampleM7Tx = [
+        // Cash sales
+        { id: 'TX-C1', type: 'cash', date: '2026-03-01', customerCode: 'C-01', customerName: 'Somchai Roofing', salespersonCode: '04', grandTotal: 1000000 },
+        { id: 'TX-C2', type: 'cash', date: '2026-03-05', customerCode: 'C-02', customerName: 'Bangkok Builder', salespersonCode: '04', grandTotal: 500000 },
+        { id: 'TX-C3', type: 'cash', date: '2026-03-10', customerCode: 'C-03', customerName: 'Siam Steel', salespersonCode: '01', grandTotal: 300000 },
+        { id: 'TX-C4', type: 'cash', date: '2026-03-12', customerCode: 'C-01', customerName: 'Somchai Roofing', salespersonCode: '06', grandTotal: 100000 },
+        // Credit sales (matched by customerName without customerCode)
+        { id: 'TX-CR1', type: 'credit', date: '2026-03-15', customerCode: null, customerName: 'Somchai Roofing', salespersonCode: '04', grandTotal: 50000 },
+        { id: 'TX-CR2', type: 'credit', date: '2026-03-18', customerCode: null, customerName: 'Thai Construction', salespersonCode: '01', grandTotal: 45000 }
+      ];
+      // Total Cash = 1,900,000, Total Credit = 95,000 -> Ratio = 20.0x
+      // Rep 04 = 1,000,000 + 500,000 + 50,000 = 1,550,000 (Top!)
+      // Somchai Roofing = Cash (1,000,000 + 100,000 = 1,100,000) + Credit (50,000) = 1,150,000
+      const m7Data = getCustomerData(sampleM7Tx, []);
+
+      assert(
+        'M7 Salesperson Leaderboard: Rep 04 comes out highest with ฿1,550,000 total revenue',
+        m7Data !== null &&
+        m7Data.salespersonLeaderboard.length >= 3 &&
+        m7Data.salespersonLeaderboard[0].salespersonCode === '04' &&
+        m7Data.salespersonLeaderboard[0].totalRevenue === 1550000,
+        m7Data ? m7Data.salespersonLeaderboard[0] : null
+      );
+
+      assert(
+        'M7 Cash vs Credit: Cash sales (฿1.9M) are exactly 20x credit sales (฿95K) and customer matched by name',
+        m7Data !== null &&
+        m7Data.cashVsCredit.cashRevenue === 1900000 &&
+        m7Data.cashVsCredit.creditRevenue === 950000 / 10 &&
+        Math.abs(m7Data.cashVsCredit.ratio - 20) < 0.01 &&
+        m7Data.top20Customers[0].customerName === 'Somchai Roofing' &&
+        m7Data.top20Customers[0].customerCode === 'C-01' &&
+        m7Data.top20Customers[0].cashRevenue === 1100000 &&
+        m7Data.top20Customers[0].creditRevenue === 50000 &&
+        m7Data.top20Customers[0].totalRevenue === 1150000,
+        m7Data ? { ratio: m7Data.cashVsCredit.ratio, topCustomer: m7Data.top20Customers[0] } : null
+      );
+
+      // Test Case 24: Deposits aggregation, monthly running balance, and upcoming due date sorting (soonest first)
+      const sampleM7Deps = [
+        { docNo: 'DEP-01', date: '2026-01-10', customerCode: 'C-01', customerName: 'Somchai Roofing', salespersonCode: '04', total: 10000, outstanding: 2000, dueDate: '2026-04-15', fullyApplied: false },
+        { docNo: 'DEP-02', date: '2026-01-20', customerCode: 'C-02', customerName: 'Bangkok Builder', salespersonCode: '04', total: 15000, outstanding: 0, dueDate: '2026-03-01', fullyApplied: true },
+        { docNo: 'DEP-03', date: '2026-02-15', customerCode: 'C-03', customerName: 'Siam Steel', salespersonCode: '01', total: 25000, outstanding: 8000, dueDate: '2026-03-20', fullyApplied: false }
+      ];
+      const m7DepData = getCustomerData([], sampleM7Deps);
+
+      assert(
+        'M7 Deposits Pipeline: Upcoming deposits sorted soonest first by due date (2026-03-01 < 2026-03-20 < 2026-04-15)',
+        m7DepData !== null &&
+        m7DepData.upcomingDeposits.length === 3 &&
+        m7DepData.upcomingDeposits[0].docNo === 'DEP-02' &&
+        m7DepData.upcomingDeposits[0].dueDate === '2026-03-01' &&
+        m7DepData.upcomingDeposits[1].dueDate === '2026-03-20' &&
+        m7DepData.upcomingDeposits[2].dueDate === '2026-04-15' &&
+        m7DepData.totalDepositsReceived === 50000 &&
+        m7DepData.totalOutstandingDeposit === 10000 &&
+        m7DepData.depositsByMonth.length === 2 &&
+        m7DepData.depositsByMonth[0].runningOutstanding === 2000 &&
+        m7DepData.depositsByMonth[1].runningOutstanding === 10000,
+        m7DepData ? { upcoming: m7DepData.upcomingDeposits.map(d => d.dueDate), months: m7DepData.depositsByMonth } : null
+      );
+
+      // Test Case 25: Safe handling of empty datasets
+      const m7Empty = getCustomerData([], []);
+      assert(
+        'M7 Edge Safety: getCustomerData([], []) safely returns null without throwing',
+        m7Empty === null,
+        m7Empty
+      );
+
       const allPassed = results.every(r => r.passed);
-      console.log(`=== M6 runChecks() finished: ${results.filter(r => r.passed).length}/${results.length} PASSED ===`);
+      console.log(`=== M7 runChecks() finished: ${results.filter(r => r.passed).length}/${results.length} PASSED ===`);
       console.groupEnd();
 
       // Update UI indicator
